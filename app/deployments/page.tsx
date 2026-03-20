@@ -1,6 +1,16 @@
-import { supabase } from "@/lib/supabase";
-import { Deployment } from "@/lib/types";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { timeAgo } from "@/lib/format";
+
+interface Deployment {
+  id: string;
+  status: string;
+  commit_message: string;
+  branch: string;
+  hash: string;
+  env: string;
+  created_at: string;
+  author: string;
+}
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   Ready: { color: "bg-emerald-500", label: "Ready" },
@@ -10,6 +20,7 @@ const statusConfig: Record<string, { color: string; label: string }> = {
 };
 
 export default async function DeploymentsPage() {
+  const supabase = await createServerSupabaseClient();
   const { data: deployments, error } = await supabase
     .from("deployments")
     .select("*")
