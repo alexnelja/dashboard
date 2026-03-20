@@ -1,4 +1,4 @@
--- Mining Materials Aggregator Platform — Database Schema
+-- Mining Materials Aggregator Platform - Database Schema
 -- Run this in your Supabase SQL Editor
 
 -- 0. Enable PostGIS extension
