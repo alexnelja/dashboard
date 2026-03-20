@@ -3,8 +3,8 @@ import "./globals.css";
 import { Sidebar } from "./sidebar";
 
 export const metadata: Metadata = {
-  title: "Dashboard",
-  description: "Personal dashboard",
+  title: "MineMarket",
+  description: "Bulk minerals aggregator marketplace",
 };
 
 export default function RootLayout({
