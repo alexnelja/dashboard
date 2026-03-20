@@ -153,6 +153,30 @@ export interface Rating {
   created_at: string;
 }
 
+// GeoJSON point extracted from PostGIS geography columns
+export interface GeoPoint {
+  lng: number;
+  lat: number;
+}
+
+// Extended types with parsed geography for client use
+export interface MineWithGeo extends Omit<Mine, 'location'> {
+  location: GeoPoint;
+}
+
+export interface HarbourWithGeo extends Omit<Harbour, 'location'> {
+  location: GeoPoint;
+}
+
+// Listing joined with mine and harbour names for display
+export interface ListingWithDetails extends Listing {
+  mine_name: string;
+  mine_region: string;
+  mine_location: GeoPoint;
+  harbour_name: string;
+  seller_company: string;
+}
+
 export const COMMODITY_CONFIG: Record<CommodityType, { label: string; color: string }> = {
   chrome: { label: 'Chrome', color: '#f59e0b' },
   manganese: { label: 'Manganese', color: '#a78bfa' },
