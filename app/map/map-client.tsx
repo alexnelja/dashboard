@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { COMMODITY_CONFIG, MineWithGeo, HarbourWithGeo, ListingWithDetails, CommodityType } from '@/lib/types';
-import { fetchRoadRoute, generateOceanRoute, RouteSegment } from '@/lib/routes';
+import { fetchRoadRoute, generateOceanRoute, buildRailRoute, RouteSegment } from '@/lib/routes';
+import type { RouteRow } from '@/lib/queries';
 import { ListingsPanel } from './listings-panel';
 import { FilterBar, Filters } from './filter-bar';
 
@@ -48,11 +49,12 @@ interface MapClientProps {
   mines: MineWithGeo[];
   harbours: HarbourWithGeo[];
   listings: ListingWithDetails[];
+  routes: RouteRow[];
 }
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
-export function MapClient({ mines, harbours, listings }: MapClientProps) {
+export function MapClient({ mines, harbours, listings, routes }: MapClientProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -80,7 +82,25 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
     map.on('style.load', () => {
       mapReadyRef.current = true;
 
-      // --- Add empty road-routes source + layer (filled after API calls) ---
+      // --- Rail corridors source + layer (amber solid) ---
+      map.addSource('rail-routes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+
+      map.addLayer({
+        id: 'rail-routes-layer',
+        type: 'line',
+        source: 'rail-routes',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#f59e0b',
+          'line-width': 3,
+          'line-opacity': 0.8,
+        },
+      });
+
+      // --- Road haul source + layer (gray dashed, thinner) ---
       map.addSource('road-routes', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -90,18 +110,16 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
         id: 'road-routes-layer',
         type: 'line',
         source: 'road-routes',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#f59e0b',
-          'line-width': 2,
-          'line-opacity': 0.7,
+          'line-color': '#6b7280',
+          'line-width': 1.5,
+          'line-dasharray': [4, 4],
+          'line-opacity': 0.65,
         },
       });
 
-      // --- Add empty ocean-routes source + layer ---
+      // --- Ocean freight source + layer (blue dashed) ---
       map.addSource('ocean-routes', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -111,10 +129,7 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
         id: 'ocean-routes-layer',
         type: 'line',
         source: 'ocean-routes',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round',
-        },
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
           'line-color': '#3b82f6',
           'line-width': 2,
@@ -196,7 +211,10 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
         markersRef.current.push(marker);
       }
 
-      // --- Fetch road routes sequentially after map is ready ---
+      // --- Render rail corridors immediately from stored geometry ---
+      renderRailRoutes(map);
+
+      // --- Fetch road routes from Mapbox Directions API ---
       fetchRoadRoutesSequentially(map);
     });
 
@@ -210,7 +228,41 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Build a deduplicated list of mine→harbour pairs from listings,
+   * Render rail corridors from stored route_geometry (no API calls needed).
+   */
+  function renderRailRoutes(map: mapboxgl.Map) {
+    const source = map.getSource('rail-routes') as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    const railRows = routes.filter((r) => r.transport_mode === 'rail');
+    const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+
+    for (const row of railRows) {
+      const mine = mines.find((m) => m.id === row.origin_mine_id);
+      const harbour = harbours.find((h) => h.id === row.harbour_id);
+      if (!mine || !harbour) continue;
+
+      const label = `${mine.name} → ${harbour.name}`;
+      const seg = buildRailRoute(
+        row.mine_location,
+        row.harbour_location,
+        row.route_geometry,
+        label,
+        0
+      );
+
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: seg.coordinates },
+        properties: { label: seg.label },
+      });
+    }
+
+    source.setData({ type: 'FeatureCollection', features });
+  }
+
+  /**
+   * Build a deduplicated list of road mine→harbour pairs from routes data,
    * then fetch Mapbox Directions routes sequentially to avoid rate limiting.
    * Results are cached in roadRouteCacheRef.
    */
@@ -221,19 +273,31 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
       return;
     }
 
-    // Deduplicate mine→harbour pairs using listings + harbours lookup
+    // Use routes table data for road routes; fall back to listing-derived pairs
+    const roadRows = routes.filter((r) => r.transport_mode === 'road');
     const seen = new Set<string>();
     const pairs: Array<{ mine: MineWithGeo; harbour: HarbourWithGeo }> = [];
 
-    for (const listing of listings) {
-      const mine = mines.find((m) => m.id === listing.source_mine_id);
-      const harbour = harbours.find((h) => h.id === listing.loading_port_id);
-      if (!mine || !harbour) continue;
-
-      const key = `${mine.id}:${harbour.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      pairs.push({ mine, harbour });
+    if (roadRows.length > 0) {
+      for (const row of roadRows) {
+        const key = `${row.origin_mine_id}:${row.harbour_id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const mine = mines.find((m) => m.id === row.origin_mine_id);
+        const harbour = harbours.find((h) => h.id === row.harbour_id);
+        if (mine && harbour) pairs.push({ mine, harbour });
+      }
+    } else {
+      // Fallback: derive road pairs from listings
+      for (const listing of listings) {
+        const mine = mines.find((m) => m.id === listing.source_mine_id);
+        const harbour = harbours.find((h) => h.id === listing.loading_port_id);
+        if (!mine || !harbour) continue;
+        const key = `${mine.id}:${harbour.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ mine, harbour });
+      }
     }
 
     const segments: RouteSegment[] = [];
@@ -379,6 +443,15 @@ export function MapClient({ mines, harbours, listings }: MapClientProps) {
           <div className="pt-1 border-t border-gray-700/50 space-y-1.5">
             <div className="flex items-center gap-2 text-gray-300">
               <span className="flex-none w-5 h-0.5 rounded" style={{ backgroundColor: '#f59e0b' }} />
+              Rail corridor
+            </div>
+            <div className="flex items-center gap-2 text-gray-300">
+              <span
+                className="flex-none w-5 h-0.5 rounded"
+                style={{
+                  background: `repeating-linear-gradient(to right, #6b7280 0, #6b7280 4px, transparent 4px, transparent 8px)`,
+                }}
+              />
               Road haul
             </div>
             <div className="flex items-center gap-2 text-gray-300">

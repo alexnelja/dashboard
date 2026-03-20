@@ -105,12 +105,21 @@ export async function getListingById(id: string): Promise<ListingWithDetails | n
   } as ListingWithDetails;
 }
 
-export async function getRoutes(): Promise<{ origin_mine_id: string; harbour_id: string; mine_location: GeoPoint; harbour_location: GeoPoint }[]> {
+export interface RouteRow {
+  origin_mine_id: string;
+  harbour_id: string;
+  transport_mode: string;
+  route_geometry: string | null; // raw WKB hex from PostGIS, null if not set
+  mine_location: GeoPoint;
+  harbour_location: GeoPoint;
+}
+
+export async function getRoutes(): Promise<RouteRow[]> {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase
     .from('routes')
     .select(`
-      origin_mine_id, harbour_id,
+      origin_mine_id, harbour_id, transport_mode, route_geometry,
       mines!origin_mine_id (location),
       harbours!harbour_id (location)
     `);
@@ -123,6 +132,8 @@ export async function getRoutes(): Promise<{ origin_mine_id: string; harbour_id:
     return {
       origin_mine_id: r.origin_mine_id as string,
       harbour_id: r.harbour_id as string,
+      transport_mode: (r.transport_mode as string) ?? 'road',
+      route_geometry: (r.route_geometry as string | null) ?? null,
       mine_location: parseGeoPoint(mine?.location) ?? { lng: 0, lat: 0 },
       harbour_location: parseGeoPoint(harbour?.location) ?? { lng: 0, lat: 0 },
     };

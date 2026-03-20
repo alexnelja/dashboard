@@ -1,10 +1,98 @@
 import type { GeoPoint } from './types';
 
 export interface RouteSegment {
-  type: 'road' | 'ocean';
+  type: 'road' | 'rail' | 'ocean';
   coordinates: [number, number][];  // [lng, lat][]
   distance_km: number;
   label: string;
+}
+
+/**
+ * Parse a PostGIS LINESTRING WKB hex string into an array of [lng, lat] pairs.
+ *
+ * WKB LineString format (little-endian with SRID):
+ *   Byte 0:       endianness (01 = LE)
+ *   Bytes 1-4:    type (02000020 → LineString + SRID flag)
+ *   Bytes 5-8:    SRID (E6100000 = 4326)
+ *   Bytes 9-12:   numPoints (uint32 LE)
+ *   Bytes 13+:    pairs of float64 LE (X=lng, Y=lat) × numPoints
+ */
+export function parseLineStringWKB(hex: string): [number, number][] | null {
+  if (!hex || typeof hex !== 'string') return null;
+  if (!/^[0-9a-fA-F]+$/.test(hex)) return null;
+  if (hex.length < 20) return null;
+
+  try {
+    // Byte 0: endianness
+    const isLE = hex.substring(0, 2) === '01';
+    if (!isLE) return null;
+
+    // Bytes 1-4: WKB type
+    const b0 = parseInt(hex.substring(2, 4), 16);
+    const b1 = parseInt(hex.substring(4, 6), 16);
+    const b2 = parseInt(hex.substring(6, 8), 16);
+    const b3 = parseInt(hex.substring(8, 10), 16);
+    const wkbType = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+
+    const baseType = wkbType & 0x000000FF;
+    const hasSRID = (wkbType & 0x20000000) !== 0;
+
+    if (baseType !== 2) return null; // Not a LineString
+
+    // Skip endian(2) + type(8) + optional SRID(8) hex chars
+    let offset = hasSRID ? 18 : 10;
+
+    // numPoints — uint32 LE
+    const np0 = parseInt(hex.substring(offset,     offset + 2), 16);
+    const np1 = parseInt(hex.substring(offset + 2, offset + 4), 16);
+    const np2 = parseInt(hex.substring(offset + 4, offset + 6), 16);
+    const np3 = parseInt(hex.substring(offset + 6, offset + 8), 16);
+    const numPoints = (np3 << 24) | (np2 << 16) | (np1 << 8) | np0;
+    offset += 8;
+
+    if (numPoints < 2 || hex.length < offset + numPoints * 32) return null;
+
+    const coords: [number, number][] = [];
+    for (let i = 0; i < numPoints; i++) {
+      const lng = readFloat64LE(hex, offset);
+      const lat = readFloat64LE(hex, offset + 16);
+      coords.push([lng, lat]);
+      offset += 32;
+    }
+
+    return coords;
+  } catch {
+    return null;
+  }
+}
+
+/** Read a 64-bit LE float from hex string at given hex char offset */
+function readFloat64LE(hex: string, offset: number): number {
+  const buffer = new ArrayBuffer(8);
+  const view = new DataView(buffer);
+  for (let i = 0; i < 8; i++) {
+    view.setUint8(i, parseInt(hex.substring(offset + i * 2, offset + i * 2 + 2), 16));
+  }
+  return view.getFloat64(0, true);
+}
+
+/**
+ * Build a RouteSegment for a rail corridor from its stored WKB geometry.
+ * Falls back to a straight line between mine and harbour if geometry is missing.
+ */
+export function buildRailRoute(
+  mineLocation: GeoPoint,
+  harbourLocation: GeoPoint,
+  wkbHex: string | null,
+  label: string,
+  distance_km: number
+): RouteSegment {
+  const parsed = wkbHex ? parseLineStringWKB(wkbHex) : null;
+  const coordinates: [number, number][] = parsed ?? [
+    [mineLocation.lng, mineLocation.lat],
+    [harbourLocation.lng, harbourLocation.lat],
+  ];
+  return { type: 'rail', coordinates, distance_km, label };
 }
 
 /**
