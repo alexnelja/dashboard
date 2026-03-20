@@ -1,48 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { COMMODITY_CONFIG, ListingWithDetails, CommodityType } from '@/lib/types';
 import { timeAgo } from '@/lib/format';
-import { FilterBar, Filters } from './filter-bar';
-
-const DEFAULT_FILTERS: Filters = {
-  commodities: [],
-  verifiedOnly: false,
-  priceMin: null,
-  priceMax: null,
-  volumeMin: null,
-  incoterm: null,
-};
 
 interface ListingsPanelProps {
   listings: ListingWithDetails[];
   hoveredListingId: string | null;
   onListingHover: (id: string | null) => void;
   onListingClick: (listing: ListingWithDetails) => void;
-}
-
-function applyFilters(listings: ListingWithDetails[], filters: Filters): ListingWithDetails[] {
-  return listings.filter((l) => {
-    if (filters.commodities.length > 0 && !filters.commodities.includes(l.commodity_type as CommodityType)) {
-      return false;
-    }
-    if (filters.verifiedOnly && !l.is_verified) {
-      return false;
-    }
-    if (filters.priceMin !== null && l.price_per_tonne < filters.priceMin) {
-      return false;
-    }
-    if (filters.priceMax !== null && l.price_per_tonne > filters.priceMax) {
-      return false;
-    }
-    if (filters.volumeMin !== null && l.volume_tonnes < filters.volumeMin) {
-      return false;
-    }
-    if (filters.incoterm !== null && !l.incoterms.includes(filters.incoterm)) {
-      return false;
-    }
-    return true;
-  });
 }
 
 function formatVolume(tonnes: number): string {
@@ -66,26 +31,17 @@ export function ListingsPanel({
   onListingHover,
   onListingClick,
 }: ListingsPanelProps) {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const filtered = applyFilters(listings, filters);
-
   return (
     <div className="flex flex-col h-full">
-      <FilterBar
-        filters={filters}
-        onFiltersChange={setFilters}
-        listingCount={filtered.length}
-      />
-
       <div className="flex-1 overflow-y-auto">
-        {filtered.length === 0 ? (
+        {listings.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-600 text-sm gap-2 p-8">
             <span className="text-2xl">—</span>
             <span>No listings match your filters</span>
           </div>
         ) : (
           <ul className="divide-y divide-gray-800/60">
-            {filtered.map((listing) => {
+            {listings.map((listing) => {
               const config = COMMODITY_CONFIG[listing.commodity_type as CommodityType];
               const grade = getGradePercent(listing.spec_sheet);
               const isHovered = listing.id === hoveredListingId;

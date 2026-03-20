@@ -5,6 +5,40 @@ import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { COMMODITY_CONFIG, MineWithGeo, HarbourWithGeo, ListingWithDetails, CommodityType } from '@/lib/types';
 import { ListingsPanel } from './listings-panel';
+import { FilterBar, Filters } from './filter-bar';
+
+const DEFAULT_FILTERS: Filters = {
+  commodities: [],
+  verifiedOnly: false,
+  priceMin: null,
+  priceMax: null,
+  volumeMin: null,
+  incoterm: null,
+};
+
+function applyFilters(listings: ListingWithDetails[], filters: Filters): ListingWithDetails[] {
+  return listings.filter((l) => {
+    if (filters.commodities.length > 0 && !filters.commodities.includes(l.commodity_type as CommodityType)) {
+      return false;
+    }
+    if (filters.verifiedOnly && !l.is_verified) {
+      return false;
+    }
+    if (filters.priceMin !== null && l.price_per_tonne < filters.priceMin) {
+      return false;
+    }
+    if (filters.priceMax !== null && l.price_per_tonne > filters.priceMax) {
+      return false;
+    }
+    if (filters.volumeMin !== null && l.volume_tonnes < filters.volumeMin) {
+      return false;
+    }
+    if (filters.incoterm !== null && !l.incoterms.includes(filters.incoterm)) {
+      return false;
+    }
+    return true;
+  });
+}
 
 interface RouteData {
   origin_mine_id: string;
@@ -27,6 +61,8 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const filteredListings = applyFilters(listings, filters);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -186,37 +222,49 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
   }
 
   return (
-    <div className="relative h-[calc(100vh-5rem)] -m-6 md:-m-10 overflow-hidden">
-      {/* Full-width map behind everything */}
-      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
-
-      {/* Left overlay: frosted glass listings panel */}
-      <div className="absolute inset-y-0 left-0 w-2/5 min-w-0 flex flex-col z-10 bg-gray-950/85 backdrop-blur-xl border-r border-gray-800/50">
-        <ListingsPanel
-          listings={listings}
-          hoveredListingId={hoveredListingId}
-          onListingHover={handleListingHover}
-          onListingClick={handleListingClick}
+    <div className="relative h-[calc(100vh-5rem)] -m-6 md:-m-10 overflow-hidden flex flex-col">
+      {/* Filter bar at top - full width, frosted glass */}
+      <div className="relative z-20 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/50">
+        <FilterBar
+          filters={filters}
+          onFiltersChange={setFilters}
+          listingCount={filteredListings.length}
         />
       </div>
 
-      {/* Legend overlay bottom-right of map area */}
-      <div className="absolute bottom-8 right-3 z-10 bg-gray-950/80 border border-gray-700/50 rounded-lg p-3 space-y-2 text-xs backdrop-blur-md">
-        <div className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Legend</div>
-        {(Object.entries(COMMODITY_CONFIG) as [CommodityType, { label: string; color: string }][]).map(
-          ([, config]) => (
-            <div key={config.label} className="flex items-center gap-2 text-gray-300">
-              <span
-                className="w-2.5 h-2.5 rounded-full flex-none"
-                style={{ backgroundColor: config.color }}
-              />
-              {config.label}
-            </div>
-          )
-        )}
-        <div className="flex items-center gap-2 text-gray-300 pt-1 border-t border-gray-700/50">
-          <span className="w-2.5 h-2.5 rounded flex-none bg-emerald-500" />
-          Harbour
+      {/* Map + listings panel below the filter bar */}
+      <div className="relative flex-1">
+        {/* Full-width map behind everything */}
+        <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+
+        {/* Left overlay: frosted glass listings panel */}
+        <div className="absolute inset-y-0 left-0 w-2/5 min-w-0 flex flex-col z-10 bg-gray-950/85 backdrop-blur-xl border-r border-gray-800/50 overflow-y-auto">
+          <ListingsPanel
+            listings={filteredListings}
+            hoveredListingId={hoveredListingId}
+            onListingHover={handleListingHover}
+            onListingClick={handleListingClick}
+          />
+        </div>
+
+        {/* Legend overlay bottom-right of map area */}
+        <div className="absolute bottom-8 right-3 z-10 bg-gray-950/80 border border-gray-700/50 rounded-lg p-3 space-y-2 text-xs backdrop-blur-md">
+          <div className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Legend</div>
+          {(Object.entries(COMMODITY_CONFIG) as [CommodityType, { label: string; color: string }][]).map(
+            ([, config]) => (
+              <div key={config.label} className="flex items-center gap-2 text-gray-300">
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-none"
+                  style={{ backgroundColor: config.color }}
+                />
+                {config.label}
+              </div>
+            )
+          )}
+          <div className="flex items-center gap-2 text-gray-300 pt-1 border-t border-gray-700/50">
+            <span className="w-2.5 h-2.5 rounded flex-none bg-emerald-500" />
+            Harbour
+          </div>
         </div>
       </div>
     </div>
