@@ -277,10 +277,10 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         source: 'ocean-routes',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#3b82f6',
-          'line-width': 2,
-          'line-dasharray': [4, 3],
-          'line-opacity': 0.6,
+          'line-color': '#60a5fa',
+          'line-width': 3,
+          'line-dasharray': [6, 4],
+          'line-opacity': 0.8,
         },
       });
 
@@ -703,19 +703,25 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     const harbourLoc = harbour?.location ?? listing.mine_location;
     const mineLoc = listing.mine_location;
 
-    // Fit bounds to show both mine and harbour with padding
+    // Fit bounds to show mine, harbour, AND ocean destination
+    const dest = COMMODITY_DESTINATIONS[listing.commodity_type as string];
+    const boundsPoints = [mineLoc, harbourLoc];
+    if (dest && listing.commodity_type !== 'aggregates') {
+      boundsPoints.push({ lng: dest.lng, lat: dest.lat });
+    }
+
     const sw: [number, number] = [
-      Math.min(mineLoc.lng, harbourLoc.lng),
-      Math.min(mineLoc.lat, harbourLoc.lat),
+      Math.min(...boundsPoints.map(p => p.lng)),
+      Math.min(...boundsPoints.map(p => p.lat)),
     ];
     const ne: [number, number] = [
-      Math.max(mineLoc.lng, harbourLoc.lng),
-      Math.max(mineLoc.lat, harbourLoc.lat),
+      Math.max(...boundsPoints.map(p => p.lng)),
+      Math.max(...boundsPoints.map(p => p.lat)),
     ];
     map.fitBounds([sw, ne], {
       padding: { top: 140, bottom: 60, left: panelWidth + 40, right: 80 },
       maxZoom: 9,
-      duration: 1000,
+      duration: 1500,
     });
 
     // Add highlighted pulsing markers at mine (start) and harbour (end)
@@ -760,13 +766,11 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     // Render ocean route
     renderOceanRoute(map, listing);
 
-    // Position popup at midpoint of mine→harbour after map moves
+    // Position popup near the loading harbour after map moves
     setTimeout(() => {
-      const midLng = (mineLoc.lng + harbourLoc.lng) / 2;
-      const midLat = (mineLoc.lat + harbourLoc.lat) / 2;
-      const point = map.project([midLng, midLat]);
-      setPopupPos({ x: point.x, y: point.y });
-    }, 1100);
+      const point = map.project([harbourLoc.lng, harbourLoc.lat]);
+      setPopupPos({ x: point.x, y: point.y - 20 });
+    }, 1600);
   }
 
   const [panelWidth, setPanelWidth] = useState(380);
