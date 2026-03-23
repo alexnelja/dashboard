@@ -1,20 +1,43 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { getActiveListings, getActiveRequirements } from '@/lib/queries';
 import { ListingCard } from './listing-card';
 import { RequirementCard } from './requirement-card';
+import { SortSelector, type SortOption } from './sort-selector';
 
 interface MarketplacePageProps {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; sort?: string }>;
+}
+
+function sortListings<T extends { price_per_tonne: number; volume_tonnes: number; created_at: string }>(
+  listings: T[],
+  sort: SortOption
+): T[] {
+  const copy = [...listings];
+  switch (sort) {
+    case 'price_asc':
+      return copy.sort((a, b) => a.price_per_tonne - b.price_per_tonne);
+    case 'price_desc':
+      return copy.sort((a, b) => b.price_per_tonne - a.price_per_tonne);
+    case 'volume_desc':
+      return copy.sort((a, b) => b.volume_tonnes - a.volume_tonnes);
+    case 'newest':
+    default:
+      return copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
 }
 
 export default async function MarketplacePage({ searchParams }: MarketplacePageProps) {
   const params = await searchParams;
   const tab = params.tab ?? 'listings';
+  const sortParam = (params.sort ?? 'newest') as SortOption;
 
-  const [listings, requirements] = await Promise.all([
+  const [allListings, requirements] = await Promise.all([
     getActiveListings(),
     getActiveRequirements(),
   ]);
+
+  const listings = sortListings(allListings, sortParam);
 
   return (
     <div className="space-y-6">
@@ -63,6 +86,15 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
           Requirements ({requirements.length})
         </Link>
       </div>
+
+      {/* Sort control — only shown on listings tab */}
+      {tab === 'listings' && listings.length > 0 && (
+        <div className="flex justify-end">
+          <Suspense fallback={null}>
+            <SortSelector currentSort={sortParam} />
+          </Suspense>
+        </div>
+      )}
 
       {/* Content grid */}
       {tab === 'listings' ? (

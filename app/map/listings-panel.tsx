@@ -16,13 +16,25 @@ function formatVolume(tonnes: number): string {
   return `${tonnes}t`;
 }
 
-function getGradePercent(specSheet: Record<string, number>): string | null {
-  // Look for a grade key — common patterns
-  const gradeKey = Object.keys(specSheet).find((k) =>
-    /grade|fe|cr|mn|ash/i.test(k)
-  );
-  if (!gradeKey) return null;
-  return `${specSheet[gradeKey]}%`;
+function getPrimarySpec(commodity: string, spec: Record<string, number>): string {
+  const keys: Record<string, string[]> = {
+    chrome: ['cr2o3_pct', 'cr2o3', 'Cr2O3'],
+    manganese: ['mn_pct', 'mn', 'Mn'],
+    iron_ore: ['fe_pct', 'fe', 'Fe'],
+    coal: ['cv_kcal', 'cv_gar', 'CV'],
+    aggregates: ['particle_size_mm', 'size_mm'],
+  };
+  const searchKeys = keys[commodity] || [];
+  for (const k of searchKeys) {
+    if (spec[k] !== undefined) {
+      const val = spec[k];
+      if (commodity === 'coal') return `${val} kcal`;
+      return `${val}%`;
+    }
+  }
+  // Fallback: first non-moisture value
+  const entry = Object.entries(spec).find(([k]) => !k.includes('moisture'));
+  return entry ? `${entry[1]}%` : '';
 }
 
 export function ListingsPanel({
@@ -43,7 +55,7 @@ export function ListingsPanel({
           <ul className="divide-y divide-gray-800/60">
             {listings.map((listing) => {
               const config = COMMODITY_CONFIG[listing.commodity_type as CommodityType];
-              const grade = getGradePercent(listing.spec_sheet);
+              const grade = getPrimarySpec(listing.commodity_type, listing.spec_sheet);
               const isHovered = listing.id === hoveredListingId;
 
               return (
@@ -64,9 +76,9 @@ export function ListingsPanel({
                     />
                     <span className="text-sm font-medium text-gray-100 flex-1 truncate">
                       {config.label}
-                      {grade && (
+                      {grade ? (
                         <span className="ml-1 text-gray-400 font-normal">{grade}</span>
-                      )}
+                      ) : null}
                     </span>
                     {listing.is_verified && (
                       <span className="flex-none text-xs px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800">

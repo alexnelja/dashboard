@@ -51,6 +51,15 @@ const SPEC_FIELDS: Record<CommodityType, { key: string; label: string }[]> = {
   ],
 };
 
+interface MineOption {
+  id: string;
+  name: string;
+  region: string;
+  commodities: string[];
+  nearest_harbour_id: string;
+  harbour_name: string | null;
+}
+
 export default function NewListingPage() {
   const router = useRouter();
   const [commodity, setCommodity] = useState<CommodityType | null>(null);
@@ -62,29 +71,63 @@ export default function NewListingPage() {
   const [loadingPortName, setLoadingPortName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [allMines, setAllMines] = useState<MineOption[]>([]);
+  const [selectedMineId, setSelectedMineId] = useState<string | null>(null);
 
-  // Fetch loading port name for the user's mine on mount (for incoterm display)
+  // Fetch all mines for this user on mount
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
       supabase
         .from('mines')
-        .select('nearest_harbour_id, harbours(name)')
+        .select('id, name, region, commodities, nearest_harbour_id, harbours(name)')
         .eq('owner_id', user.id)
-        .limit(1)
-        .single()
         .then(({ data }) => {
-          if (data) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const h = (data as any).harbours;
-            if (h && typeof h === 'object' && 'name' in h) {
-              setLoadingPortName(h.name as string);
-            }
+          if (!data) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const mines: MineOption[] = (data as any[]).map((m) => ({
+            id: m.id,
+            name: m.name,
+            region: m.region,
+            commodities: m.commodities ?? [],
+            nearest_harbour_id: m.nearest_harbour_id,
+            harbour_name: m.harbours && typeof m.harbours === 'object' && 'name' in m.harbours
+              ? (m.harbours as { name: string }).name
+              : null,
+          }));
+          setAllMines(mines);
+          // Auto-select first mine if only one
+          if (mines.length === 1) {
+            setSelectedMineId(mines[0].id);
+            setLoadingPortName(mines[0].harbour_name);
           }
         });
     });
   }, []);
+
+  // Filter mines by selected commodity
+  const availableMines = commodity
+    ? allMines.filter((m) => m.commodities.includes(commodity))
+    : allMines;
+
+  // When selected mine changes, update loading port name
+  function handleMineSelect(mineId: string) {
+    setSelectedMineId(mineId);
+    const mine = allMines.find((m) => m.id === mineId);
+    setLoadingPortName(mine?.harbour_name ?? null);
+  }
+
+  // When commodity changes, reset mine selection if current mine doesn't support it
+  function handleCommoditySelect(type: CommodityType) {
+    setCommodity(type);
+    setSpecs({});
+    const mine = allMines.find((m) => m.id === selectedMineId);
+    if (mine && !mine.commodities.includes(type)) {
+      setSelectedMineId(null);
+      setLoadingPortName(null);
+    }
+  }
 
   function toggleIncoterm(term: string) {
     setSelectedIncoterms((prev) =>
@@ -111,6 +154,10 @@ export default function NewListingPage() {
 
     if (!commodity) {
       setError('Please select a commodity type.');
+      return;
+    }
+    if (!selectedMineId) {
+      setError('Please select a mine.');
       return;
     }
     if (!price || !volume) {
@@ -149,19 +196,11 @@ export default function NewListingPage() {
         });
       }
 
-      // Get first mine for this user (simplified v1)
-      const { data: mines, error: minesError } = await supabase
-        .from('mines')
-        .select('id, nearest_harbour_id')
-        .eq('owner_id', authUser.id)
-        .limit(1);
-
-      if (minesError || !mines || mines.length === 0) {
-        setError('No mine found for your account. Please contact support.');
+      const mine = allMines.find((m) => m.id === selectedMineId);
+      if (!mine) {
+        setError('Selected mine not found. Please try again.');
         return;
       }
-
-      const mine = mines[0];
 
       // Build spec_sheet from filled-in values
       const spec_sheet: Record<string, number> = {};
@@ -219,10 +258,7 @@ export default function NewListingPage() {
                 <button
                   key={type}
                   type="button"
-                  onClick={() => {
-                    setCommodity(type);
-                    setSpecs({});
-                  }}
+                  onClick={() => handleCommoditySelect(type)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
                     commodity === type
                       ? 'border-white text-white bg-gray-800'
@@ -239,6 +275,33 @@ export default function NewListingPage() {
             )}
           </div>
         </div>
+
+        {/* Mine selector */}
+        {availableMines.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Mine</label>
+            <select
+              value={selectedMineId ?? ''}
+              onChange={(e) => handleMineSelect(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+            >
+              <option value="" disabled>Select a mine…</option>
+              {availableMines.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} — {m.region}{m.harbour_name ? ` (loading: ${m.harbour_name})` : ''}
+                </option>
+              ))}
+            </select>
+            {selectedMineId && loadingPortName && (
+              <p className="mt-1 text-xs text-gray-500">Loading port auto-set to {loadingPortName}</p>
+            )}
+          </div>
+        )}
+        {commodity && availableMines.length === 0 && (
+          <div className="bg-yellow-900/20 border border-yellow-800/50 text-yellow-300 text-sm rounded-lg px-4 py-3">
+            No mines found for your account that produce {COMMODITY_CONFIG[commodity].label}. Please contact support.
+          </div>
+        )}
 
         {/* Price + Volume + Currency */}
         <div className="grid grid-cols-2 gap-4">

@@ -45,8 +45,34 @@ function applyFilters(listings: ListingWithDetails[], filters: Filters): Listing
   });
 }
 
-// Representative global destination port (Shanghai)
-const SHANGHAI: { lng: number; lat: number } = { lng: 121.47, lat: 31.23 };
+// Commodity-specific destination ports
+const COMMODITY_DESTINATIONS: Record<string, { name: string; lng: number; lat: number }> = {
+  chrome: { name: 'Qinzhou', lng: 108.647, lat: 21.683 },
+  manganese: { name: 'Qingdao', lng: 120.383, lat: 36.067 },
+  iron_ore: { name: 'Kashima', lng: 140.617, lat: 35.900 },
+  coal: { name: 'Mundra', lng: 69.566, lat: 22.748 },
+};
+
+function getPrimarySpec(commodity: string, spec: Record<string, number>): string {
+  const keys: Record<string, string[]> = {
+    chrome: ['cr2o3_pct', 'cr2o3', 'Cr2O3'],
+    manganese: ['mn_pct', 'mn', 'Mn'],
+    iron_ore: ['fe_pct', 'fe', 'Fe'],
+    coal: ['cv_kcal', 'cv_gar', 'CV'],
+    aggregates: ['particle_size_mm', 'size_mm'],
+  };
+  const searchKeys = keys[commodity] || [];
+  for (const k of searchKeys) {
+    if (spec[k] !== undefined) {
+      const val = spec[k];
+      if (commodity === 'coal') return `${val} kcal`;
+      return `${val}%`;
+    }
+  }
+  // Fallback: first non-moisture value
+  const entry = Object.entries(spec).find(([k]) => !k.includes('moisture'));
+  return entry ? `${entry[1]}%` : '';
+}
 
 interface MapClientProps {
   mines: MineWithGeo[];
@@ -272,12 +298,28 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         el.style.cursor = 'pointer';
         el.style.boxShadow = `0 0 6px ${color}80`;
 
+        const mineListings = listings.filter((l) => l.source_mine_id === mine.id && l.status === 'active');
+        const listingRows = mineListings
+          .map((l) => {
+            const spec = getPrimarySpec(l.commodity_type, l.spec_sheet);
+            const vol = l.volume_tonnes >= 1000
+              ? `${(l.volume_tonnes / 1000).toFixed(0)}kt`
+              : `${l.volume_tonnes}t`;
+            const label = COMMODITY_CONFIG[l.commodity_type as CommodityType]?.label ?? l.commodity_type;
+            return `<div style="font-size:11px;color:#d1d5db;margin-top:3px;">• ${label}${spec ? ` ${spec}` : ''} — <span style="color:#fbbf24">$${l.price_per_tonne}/t</span> — ${vol}</div>`;
+          })
+          .join('');
+
         const popupHtml = `
-          <div style="font-family: sans-serif; padding: 4px 2px;">
+          <div style="font-family: sans-serif; padding: 4px 2px; min-width: 180px;">
             <div style="font-weight: 600; font-size: 13px; color: #f9fafb; margin-bottom: 2px;">${mine.name}</div>
             <div style="font-size: 11px; color: #9ca3af;">${mine.region}, ${mine.country}</div>
             <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">
               ${mine.commodities.map((c) => COMMODITY_CONFIG[c as CommodityType]?.label ?? c).join(' · ')}
+            </div>
+            <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.1);">
+              <div style="font-size: 11px; color: #6b7280;">${mineListings.length} active listing${mineListings.length !== 1 ? 's' : ''}${mineListings.length > 0 ? ':' : ''}</div>
+              ${listingRows}
             </div>
           </div>
         `;
@@ -408,10 +450,16 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     const harbour = harbours.find((h) => h.id === listing.loading_port_id);
     const from = harbour ? harbour.location : listing.mine_location;
 
+    // Aggregates are domestic only — no ocean route
+    if (listing.commodity_type === 'aggregates') return;
+
+    const dest = COMMODITY_DESTINATIONS[listing.commodity_type];
+    if (!dest) return;
+
     const segment = generateOceanRoute(
       from,
-      SHANGHAI,
-      `${listing.harbour_name} → Shanghai`
+      dest,
+      `${listing.harbour_name} → ${dest.name}`
     );
 
     const source = map.getSource('ocean-routes') as mapboxgl.GeoJSONSource | undefined;
@@ -844,7 +892,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
       {/* Listing popup — positioned above the route midpoint on the map */}
       {selectedListing && popupPos && (() => {
         const config = COMMODITY_CONFIG[selectedListing.commodity_type];
-        const mainSpec = Object.entries(selectedListing.spec_sheet).find(([k]) => !k.includes('moisture'));
+        const mainSpec = getPrimarySpec(selectedListing.commodity_type, selectedListing.spec_sheet);
         return (
           <div
             className="absolute z-30 pointer-events-auto"
@@ -862,7 +910,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
                 <div className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: config.color }} />
                   <span className="text-xs font-semibold text-white">
-                    {config.label} {mainSpec ? `${mainSpec[1]}%` : ''}
+                    {config.label} {mainSpec || ''}
                   </span>
                   {selectedListing.is_verified && (
                     <span className="text-[9px] text-emerald-400">✓</span>
