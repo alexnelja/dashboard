@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
+import Link from 'next/link';
 import { COMMODITY_CONFIG, MineWithGeo, HarbourWithGeo, ListingWithDetails, CommodityType } from '@/lib/types';
 import { fetchRoadRoute, generateOceanRoute, buildRailRoute, RouteSegment } from '@/lib/routes';
 import type { RouteRow } from '@/lib/queries';
@@ -61,6 +62,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
   const roadRouteCacheRef = useRef<RouteSegment[]>([]);
   const mapReadyRef = useRef(false);
   const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
+  const [selectedListing, setSelectedListing] = useState<ListingWithDetails | null>(null);
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const filteredListings = applyFilters(listings, filters);
 
@@ -387,6 +389,8 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
   function handleListingClick(listing: ListingWithDetails) {
     if (!mapRef.current) return;
 
+    setSelectedListing(listing);
+
     mapRef.current.flyTo({
       center: [listing.mine_location.lng, listing.mine_location.lat],
       zoom: 8,
@@ -431,7 +435,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
       <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Filter bar - floating at top, transparent */}
-      <div className="absolute top-0 left-0 right-0 z-20 bg-gray-950/60 backdrop-blur-md border-b border-white/5">
+      <div className="absolute top-0 left-0 right-0 z-20 bg-gray-950/20 backdrop-blur-xl border-b border-white/5">
         <FilterBar
           filters={filters}
           onFiltersChange={setFilters}
@@ -445,7 +449,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         style={{ width: panelWidth }}
       >
         {/* Panel content */}
-        <div className="flex-1 bg-gray-950/50 backdrop-blur-lg border-r border-white/5 overflow-y-auto">
+        <div className="flex-1 bg-gray-950/20 backdrop-blur-xl border-r border-white/5 overflow-y-auto">
           <ListingsPanel
             listings={filteredListings}
             hoveredListingId={hoveredListingId}
@@ -465,8 +469,95 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         </div>
       </div>
 
+      {/* Listing detail popup — floating on map when a listing is clicked */}
+      {selectedListing && (() => {
+        const config = COMMODITY_CONFIG[selectedListing.commodity_type];
+        const spec = selectedListing.spec_sheet;
+        const mainSpec = Object.entries(spec).find(([k]) => !k.includes('moisture'));
+        return (
+          <div
+            className="absolute top-24 z-30 bg-gray-950/20 backdrop-blur-xl border border-white/10 rounded-xl p-4 w-72 shadow-2xl"
+            style={{ left: panelWidth + 24 }}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => { setSelectedListing(null); clearOceanRoute(); }}
+              className="absolute top-2 right-2 text-gray-400 hover:text-white text-sm w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10"
+            >
+              ×
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: config.color }} />
+              <span className="text-sm font-semibold text-white">
+                {config.label} {mainSpec ? `${mainSpec[1]}%` : ''}
+              </span>
+              {selectedListing.is_verified && (
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">✓ Verified</span>
+              )}
+            </div>
+
+            {/* Route */}
+            <p className="text-xs text-gray-400 mb-3">
+              {selectedListing.mine_name} → {selectedListing.harbour_name}
+            </p>
+
+            {/* Price + Volume */}
+            <div className="flex items-baseline justify-between mb-3">
+              <span className="text-lg font-bold text-amber-400">
+                ${selectedListing.price_per_tonne}/t
+              </span>
+              <span className="text-sm text-gray-400">
+                {selectedListing.volume_tonnes >= 1000
+                  ? `${(selectedListing.volume_tonnes / 1000).toFixed(0)}kt`
+                  : `${selectedListing.volume_tonnes}t`}
+              </span>
+            </div>
+
+            {/* Incoterms */}
+            <div className="flex gap-1.5 mb-3">
+              {selectedListing.incoterms.map((term) => (
+                <span key={term} className="text-[10px] bg-blue-500/15 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">
+                  {term}
+                </span>
+              ))}
+              <span className="text-[10px] text-gray-500 ml-auto">{selectedListing.currency}</span>
+            </div>
+
+            {/* Spec sheet */}
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 mb-3 text-xs">
+              {Object.entries(spec).map(([key, val]) => (
+                <div key={key} className="flex justify-between">
+                  <span className="text-gray-500">{key.replace(/_/g, ' ')}</span>
+                  <span className="text-gray-300">{String(val)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Seller */}
+            <p className="text-xs text-gray-500 mb-3">
+              Seller: <span className="text-gray-300">{selectedListing.seller_company}</span>
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <Link
+                href={`/marketplace/listings/${selectedListing.id}`}
+                className="flex-1 text-center text-xs bg-white text-black rounded-lg px-3 py-1.5 font-medium hover:bg-gray-200 transition-colors"
+              >
+                View Details
+              </Link>
+              <button className="flex-1 text-center text-xs bg-white/10 text-white rounded-lg px-3 py-1.5 font-medium hover:bg-white/20 transition-colors border border-white/10">
+                Express Interest
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Legend overlay bottom-right of map area */}
-        <div className="absolute bottom-8 right-3 z-10 bg-gray-950/80 border border-gray-700/50 rounded-lg p-3 space-y-2 text-xs backdrop-blur-md">
+        <div className="absolute bottom-8 right-3 z-10 bg-gray-950/20 border border-white/5 rounded-lg p-3 space-y-2 text-xs backdrop-blur-xl">
           <div className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Legend</div>
           {(Object.entries(COMMODITY_CONFIG) as [CommodityType, { label: string; color: string }][]).map(
             ([, config]) => (
