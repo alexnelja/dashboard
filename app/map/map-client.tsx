@@ -116,10 +116,15 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         orex: { classification: 'heavyhaul30t', transnetName: 'OREX Line — Sishen to Saldanha' },
         coallink: { classification: 'heavyhaul26t', transnetName: 'Coal Line — Ermelo to Richards Bay' },
         manganese: { classification: 'heavyhaul26t', transnetName: 'Manganese Corridor — Hotazel to Ngqura' },
+        waterberg: { classification: 'heavyhaul26t', transnetName: 'Waterberg Line — Lephalale to Ogies' },
         container: { classification: 'mainline20t', transnetName: 'Container Corridor — Durban to Johannesburg' },
+        maputo: { classification: 'mainline20t', transnetName: 'Maputo Corridor — Pretoria to Komatipoort' },
+        steelpoort: { classification: 'mainline20t', transnetName: 'Steelpoort Branch — Chrome' },
+        phalaborwa: { classification: 'mainline20t', transnetName: 'Phalaborwa Branch' },
         cape: { classification: 'mainline20t', transnetName: 'Cape Corridor — Kimberley to Cape Town' },
         randnatal: { classification: 'mainline20t', transnetName: 'Rand-Natal Line' },
         capenatal: { classification: 'mainline20t', transnetName: 'Cape-Natal Cross Line' },
+        central: { classification: 'mainline20t', transnetName: 'Central Corridor Network' },
         northern: { classification: 'mainline20t', transnetName: 'Northern Line' },
       };
 
