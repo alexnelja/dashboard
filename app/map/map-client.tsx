@@ -703,25 +703,19 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     const harbourLoc = harbour?.location ?? listing.mine_location;
     const mineLoc = listing.mine_location;
 
-    // Fit bounds to show mine, harbour, AND ocean destination
-    const dest = COMMODITY_DESTINATIONS[listing.commodity_type as string];
-    const boundsPoints = [mineLoc, harbourLoc];
-    if (dest && listing.commodity_type !== 'aggregates') {
-      boundsPoints.push({ lng: dest.lng, lat: dest.lat });
-    }
-
+    // Fit bounds to show mine and harbour (land route only)
     const sw: [number, number] = [
-      Math.min(...boundsPoints.map(p => p.lng)),
-      Math.min(...boundsPoints.map(p => p.lat)),
+      Math.min(mineLoc.lng, harbourLoc.lng),
+      Math.min(mineLoc.lat, harbourLoc.lat),
     ];
     const ne: [number, number] = [
-      Math.max(...boundsPoints.map(p => p.lng)),
-      Math.max(...boundsPoints.map(p => p.lat)),
+      Math.max(mineLoc.lng, harbourLoc.lng),
+      Math.max(mineLoc.lat, harbourLoc.lat),
     ];
     map.fitBounds([sw, ne], {
       padding: { top: 140, bottom: 60, left: panelWidth + 40, right: 80 },
       maxZoom: 9,
-      duration: 1500,
+      duration: 1000,
     });
 
     // Add highlighted pulsing markers at mine (start) and harbour (end)
@@ -763,14 +757,13 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
       },
     });
 
-    // Render ocean route
-    renderOceanRoute(map, listing);
-
-    // Position popup near the loading harbour after map moves
+    // Position popup at midpoint of mine→harbour after map moves
     setTimeout(() => {
-      const point = map.project([harbourLoc.lng, harbourLoc.lat]);
-      setPopupPos({ x: point.x, y: point.y - 20 });
-    }, 1600);
+      const midLng = (mineLoc.lng + harbourLoc.lng) / 2;
+      const midLat = (mineLoc.lat + harbourLoc.lat) / 2;
+      const point = map.project([midLng, midLat]);
+      setPopupPos({ x: point.x, y: point.y });
+    }, 1100);
   }
 
   const [panelWidth, setPanelWidth] = useState(380);
