@@ -396,10 +396,42 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     renderOceanRoute(mapRef.current, listing);
   }
 
+  const [panelWidth, setPanelWidth] = useState(380);
+  const isDragging = useRef(false);
+
+  function handleDragStart(e: React.MouseEvent) {
+    e.preventDefault();
+    isDragging.current = true;
+
+    function onMove(ev: MouseEvent) {
+      if (!isDragging.current) return;
+      // Account for sidebar width (224px on md+)
+      const sidebarWidth = window.innerWidth >= 768 ? 224 : 0;
+      const newWidth = Math.max(280, Math.min(ev.clientX - sidebarWidth, window.innerWidth * 0.6));
+      setPanelWidth(newWidth);
+    }
+
+    function onUp() {
+      isDragging.current = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   return (
-    <div className="relative h-[calc(100vh-5rem)] -m-6 md:-m-10 overflow-hidden flex flex-col">
-      {/* Filter bar at top - full width, frosted glass */}
-      <div className="relative z-20 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/50">
+    <div className="relative h-[calc(100vh-5rem)] -m-6 md:-m-10 overflow-hidden">
+      {/* Map fills ENTIRE area behind everything */}
+      <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
+
+      {/* Filter bar - floating at top, transparent */}
+      <div className="absolute top-0 left-0 right-0 z-20 bg-gray-950/60 backdrop-blur-md border-b border-white/5">
         <FilterBar
           filters={filters}
           onFiltersChange={setFilters}
@@ -407,13 +439,13 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
         />
       </div>
 
-      {/* Map + listings panel below the filter bar */}
-      <div className="relative flex-1">
-        {/* Full-width map behind everything */}
-        <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
-
-        {/* Left overlay: frosted glass listings panel */}
-        <div className="absolute inset-y-0 left-0 w-2/5 min-w-0 flex flex-col z-10 bg-gray-950/85 backdrop-blur-xl border-r border-gray-800/50 overflow-y-auto">
+      {/* Listings panel - left overlay, transparent, below filter bar */}
+      <div
+        className="absolute top-[88px] bottom-0 left-0 z-10 flex"
+        style={{ width: panelWidth }}
+      >
+        {/* Panel content */}
+        <div className="flex-1 bg-gray-950/50 backdrop-blur-lg border-r border-white/5 overflow-y-auto">
           <ListingsPanel
             listings={filteredListings}
             hoveredListingId={hoveredListingId}
@@ -422,7 +454,18 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
           />
         </div>
 
-        {/* Legend overlay bottom-right of map area */}
+        {/* Drag handle */}
+        <div
+          onMouseDown={handleDragStart}
+          className="w-1.5 cursor-col-resize flex-shrink-0 group relative hover:bg-white/10 transition-colors"
+        >
+          <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-center">
+            <div className="w-0.5 h-8 bg-white/20 rounded-full group-hover:bg-white/40 transition-colors" />
+          </div>
+        </div>
+      </div>
+
+      {/* Legend overlay bottom-right of map area */}
         <div className="absolute bottom-8 right-3 z-10 bg-gray-950/80 border border-gray-700/50 rounded-lg p-3 space-y-2 text-xs backdrop-blur-md">
           <div className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Legend</div>
           {(Object.entries(COMMODITY_CONFIG) as [CommodityType, { label: string; color: string }][]).map(
@@ -464,7 +507,6 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
               Ocean freight
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
