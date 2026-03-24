@@ -222,3 +222,24 @@ CREATE POLICY "Deal participants can upload documents" ON deal_documents FOR INS
 CREATE POLICY "Public read verifications" ON verifications FOR SELECT USING (true);
 CREATE POLICY "Public read ratings" ON ratings FOR SELECT USING (true);
 CREATE POLICY "Rater can create rating" ON ratings FOR INSERT WITH CHECK (auth.uid() = rater_id);
+
+-- 16. DELETE RLS Policies
+-- Allow sellers to delete their own listings
+CREATE POLICY "Seller can delete listings" ON listings
+  FOR DELETE USING (auth.uid() = seller_id);
+
+-- Allow buyers to delete their own requirements
+CREATE POLICY "Buyer can delete requirements" ON requirements
+  FOR DELETE USING (auth.uid() = buyer_id);
+
+-- Allow users to delete their own profile (account deletion)
+CREATE POLICY "Users can delete own profile" ON users
+  FOR DELETE USING (auth.uid() = id);
+
+-- Allow deal participants to delete milestones they created
+CREATE POLICY "Creator can delete milestones" ON deal_milestones
+  FOR DELETE USING (auth.uid() = created_by);
+
+-- Allow uploader to delete their own documents
+CREATE POLICY "Uploader can delete documents" ON deal_documents
+  FOR DELETE USING (auth.uid() = uploaded_by);

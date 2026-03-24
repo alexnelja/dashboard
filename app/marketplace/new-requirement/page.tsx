@@ -98,6 +98,18 @@ export default function NewRequirementPage() {
       return;
     }
 
+    const priceNum = parseFloat(targetPrice);
+    const volumeNum = parseFloat(volume);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      setError('Price must be a positive number');
+      return;
+    }
+    if (isNaN(volumeNum) || volumeNum <= 0) {
+      setError('Volume must be a positive number');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -129,8 +141,8 @@ export default function NewRequirementPage() {
         buyer_id: authUser.id,
         commodity_type: commodity,
         target_spec_range: {},
-        volume_needed: parseFloat(volume),
-        target_price: parseFloat(targetPrice),
+        volume_needed: volumeNum,
+        target_price: priceNum,
         currency,
         delivery_port: deliveryPortName || deliveryPort.trim(),
         incoterm,
@@ -189,7 +201,7 @@ export default function NewRequirementPage() {
             <label className="block text-sm font-medium text-gray-300 mb-1">Target price per tonne</label>
             <input
               type="number"
-              min="0"
+              min="0.01"
               step="0.01"
               value={targetPrice}
               onChange={(e) => setTargetPrice(e.target.value)}
@@ -201,7 +213,7 @@ export default function NewRequirementPage() {
             <label className="block text-sm font-medium text-gray-300 mb-1">Volume needed (tonnes)</label>
             <input
               type="number"
-              min="0"
+              min="0.01"
               step="1"
               value={volume}
               onChange={(e) => setVolume(e.target.value)}

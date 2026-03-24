@@ -1,6 +1,9 @@
 # dependencies
 node_modules/
 
+# seed scripts contain service-role credentials — never commit
+scripts/
+
 # next.js
 .next/
 out/

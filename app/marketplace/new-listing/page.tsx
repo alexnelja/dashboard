@@ -169,6 +169,32 @@ export default function NewListingPage() {
       return;
     }
 
+    const priceNum = parseFloat(price);
+    const volumeNum = parseFloat(volume);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      setError('Price must be a positive number');
+      return;
+    }
+    if (isNaN(volumeNum) || volumeNum <= 0) {
+      setError('Volume must be a positive number');
+      return;
+    }
+
+    // Validate spec sheet: no negative values for percentage fields
+    if (commodity) {
+      for (const field of SPEC_FIELDS[commodity]) {
+        const val = specs[field.key];
+        if (val !== undefined && val !== '') {
+          const num = parseFloat(val);
+          if (isNaN(num) || num < 0) {
+            setError(`${field.label} must be a non-negative number`);
+            return;
+          }
+        }
+      }
+    }
+
     setSubmitting(true);
 
     try {
@@ -218,8 +244,8 @@ export default function NewListingPage() {
         source_mine_id: mine.id,
         commodity_type: commodity,
         spec_sheet,
-        volume_tonnes: parseFloat(volume),
-        price_per_tonne: parseFloat(price),
+        volume_tonnes: volumeNum,
+        price_per_tonne: priceNum,
         currency,
         incoterms: selectedIncoterms,
         loading_port_id: mine.nearest_harbour_id,
@@ -309,7 +335,7 @@ export default function NewListingPage() {
             <label className="block text-sm font-medium text-gray-300 mb-1">Price per tonne</label>
             <input
               type="number"
-              min="0"
+              min="0.01"
               step="0.01"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
@@ -321,7 +347,7 @@ export default function NewListingPage() {
             <label className="block text-sm font-medium text-gray-300 mb-1">Volume (tonnes)</label>
             <input
               type="number"
-              min="0"
+              min="0.01"
               step="1"
               value={volume}
               onChange={(e) => setVolume(e.target.value)}
