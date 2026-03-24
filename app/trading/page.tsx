@@ -1,11 +1,43 @@
-export default function TradingPage() {
+import { COMMODITY_CONFIG } from '@/lib/types';
+import type { CommodityType } from '@/lib/types';
+import { getTradingStats, getCompletedDeals } from '@/lib/deal-queries';
+import { StatsRow } from './stats-row';
+import { PriceChart } from './price-chart';
+import { RecentDealsTable } from './recent-deals-table';
+import { CommodityTabSwitcher } from './commodity-tab-switcher';
+
+interface TradingPageProps {
+  searchParams: Promise<{ commodity?: string }>;
+}
+
+export default async function TradingPage({ searchParams }: TradingPageProps) {
+  const params = await searchParams;
+  const commodity = (params.commodity as CommodityType) || 'chrome';
+  const config = COMMODITY_CONFIG[commodity];
+
+  const [stats, completedDeals] = await Promise.all([
+    getTradingStats(commodity),
+    getCompletedDeals(commodity),
+  ]);
+
   return (
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight mb-2">Trading</h1>
-      <p className="text-gray-400 text-sm">Market data, price charts, and recent deals.</p>
-      <div className="mt-8 bg-gray-900 border border-gray-800 rounded-xl p-12 text-center text-gray-500">
-        Trading view coming in Plan 3
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Trading</h1>
+        <p className="text-gray-400 text-sm">Market data, price charts, and recent deals.</p>
       </div>
+
+      {/* Commodity tabs */}
+      <CommodityTabSwitcher activeCommodity={commodity} />
+
+      {/* Stats */}
+      <StatsRow stats={stats} currency="USD" />
+
+      {/* Price chart */}
+      <PriceChart data={stats.priceHistory} color={config.color} />
+
+      {/* Recent deals */}
+      <RecentDealsTable deals={completedDeals} avgPrice={stats.avgAskPrice} />
     </div>
   );
 }
