@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
+import { canAddMilestone } from '@/lib/deal-helpers';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -27,6 +28,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!milestone_type) {
     return NextResponse.json({ error: 'milestone_type is required' }, { status: 400 });
+  }
+
+  // Enforce role-based milestone creation
+  const role = deal.buyer_id === user.id ? 'buyer' as const : 'seller' as const;
+  if (!canAddMilestone(milestone_type, role)) {
+    return NextResponse.json({
+      error: `As the ${role}, you cannot add the "${milestone_type}" milestone. This is a ${role === 'buyer' ? 'seller' : 'buyer'} action.`,
+    }, { status: 403 });
   }
 
   const { data: milestone, error } = await supabase

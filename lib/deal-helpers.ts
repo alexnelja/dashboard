@@ -1,27 +1,100 @@
 import type { DealStatus } from './types';
 
-// Valid status transitions — maps current status to allowed next statuses
-const TRANSITIONS: Record<DealStatus, DealStatus[]> = {
-  interest: ['first_accept', 'cancelled'],
-  first_accept: ['negotiation', 'cancelled'],
-  negotiation: ['second_accept', 'cancelled'],
-  second_accept: ['escrow_held', 'cancelled'],
-  escrow_held: ['loading', 'disputed', 'cancelled'],
-  loading: ['in_transit', 'disputed'],
-  in_transit: ['delivered', 'disputed'],
-  delivered: ['escrow_released', 'disputed'],
-  escrow_released: ['completed'],
+// Role that can trigger each transition
+export type DealRole = 'buyer' | 'seller' | 'either';
+
+interface TransitionRule {
+  to: DealStatus;
+  allowedBy: DealRole;
+}
+
+// Valid status transitions with role enforcement
+const TRANSITIONS: Record<DealStatus, TransitionRule[]> = {
+  interest: [
+    { to: 'first_accept', allowedBy: 'seller' },   // seller acknowledges buyer's interest
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
+  first_accept: [
+    { to: 'negotiation', allowedBy: 'either' },     // either party opens negotiation
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
+  negotiation: [
+    { to: 'second_accept', allowedBy: 'either' },   // either party locks terms (v1 — dual confirm in v2)
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
+  second_accept: [
+    { to: 'escrow_held', allowedBy: 'seller' },     // seller confirms deposit received (admin in v2)
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
+  escrow_held: [
+    { to: 'loading', allowedBy: 'seller' },          // seller confirms material loaded
+    { to: 'disputed', allowedBy: 'either' },
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
+  loading: [
+    { to: 'in_transit', allowedBy: 'seller' },       // seller confirms vessel departed
+    { to: 'disputed', allowedBy: 'either' },
+  ],
+  in_transit: [
+    { to: 'delivered', allowedBy: 'buyer' },          // buyer confirms material received
+    { to: 'disputed', allowedBy: 'either' },
+  ],
+  delivered: [
+    { to: 'escrow_released', allowedBy: 'buyer' },    // buyer approves release (admin in v2)
+    { to: 'disputed', allowedBy: 'either' },
+  ],
+  escrow_released: [
+    { to: 'completed', allowedBy: 'either' },
+  ],
   completed: [],
-  disputed: ['escrow_released', 'cancelled'],
+  disputed: [
+    { to: 'escrow_released', allowedBy: 'either' },  // admin resolves (v1: either party for testing)
+    { to: 'cancelled', allowedBy: 'either' },
+  ],
   cancelled: [],
 };
 
+// Milestone role enforcement — who can add which milestones
+export const MILESTONE_ROLES: Record<string, DealRole> = {
+  loaded: 'seller',          // seller confirms material loaded
+  departed_port: 'seller',   // seller/transporter confirms departure
+  in_transit: 'either',      // either party can log transit update
+  arrived_port: 'buyer',     // buyer confirms arrival at destination
+  customs: 'buyer',          // buyer handles customs at destination
+  delivered: 'buyer',        // buyer confirms final delivery
+};
+
 export function canTransition(current: DealStatus, next: DealStatus): boolean {
-  return TRANSITIONS[current]?.includes(next) ?? false;
+  return TRANSITIONS[current]?.some((r) => r.to === next) ?? false;
+}
+
+export function canTransitionAsRole(
+  current: DealStatus,
+  next: DealStatus,
+  role: 'buyer' | 'seller'
+): boolean {
+  const rule = TRANSITIONS[current]?.find((r) => r.to === next);
+  if (!rule) return false;
+  return rule.allowedBy === 'either' || rule.allowedBy === role;
 }
 
 export function getNextStatuses(current: DealStatus): DealStatus[] {
-  return TRANSITIONS[current] ?? [];
+  return TRANSITIONS[current]?.map((r) => r.to) ?? [];
+}
+
+export function getNextStatusesForRole(
+  current: DealStatus,
+  role: 'buyer' | 'seller'
+): DealStatus[] {
+  return (TRANSITIONS[current] ?? [])
+    .filter((r) => r.allowedBy === 'either' || r.allowedBy === role)
+    .map((r) => r.to);
+}
+
+export function canAddMilestone(milestoneType: string, role: 'buyer' | 'seller'): boolean {
+  const allowed = MILESTONE_ROLES[milestoneType];
+  if (!allowed) return false;
+  return allowed === 'either' || allowed === role;
 }
 
 // Human-readable labels for deal statuses

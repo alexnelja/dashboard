@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { MILESTONE_ORDER } from '@/lib/deal-helpers';
+import { MILESTONE_ORDER, canAddMilestone } from '@/lib/deal-helpers';
 import type { DealMilestone, DealStatus, MilestoneType } from '@/lib/types';
 
 interface MilestoneTimelineProps {
@@ -24,9 +24,11 @@ export function MilestoneTimeline({ dealId, milestones, dealStatus, isBuyer }: M
   // Only show add milestone for active shipping statuses
   const showAdd = ['loading', 'in_transit', 'delivered'].includes(dealStatus);
 
-  // Determine which milestone types can be added
+  // Determine which milestone types can be added by this user's role
+  const role = isBuyer ? 'buyer' as const : 'seller' as const;
   const addableTypes = MILESTONE_ORDER
     .filter((m) => !completedTypes.has(m.type as MilestoneType))
+    .filter((m) => canAddMilestone(m.type, role))
     .map((m) => m.type);
 
   async function addMilestone(type: string) {

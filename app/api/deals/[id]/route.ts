@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase-server';
-import { canTransition } from '@/lib/deal-helpers';
+import { canTransition, canTransitionAsRole } from '@/lib/deal-helpers';
 import type { DealStatus } from '@/lib/types';
 
 interface RouteContext {
@@ -62,6 +62,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({
       error: `Cannot transition from ${deal.status} to ${newStatus}`,
     }, { status: 400 });
+  }
+
+  // Enforce role-based access
+  const role = deal.buyer_id === user.id ? 'buyer' as const : 'seller' as const;
+  if (!canTransitionAsRole(deal.status as DealStatus, newStatus, role)) {
+    return NextResponse.json({
+      error: `As the ${role}, you cannot move this deal to ${newStatus}. This action requires the ${role === 'buyer' ? 'seller' : 'buyer'}.`,
+    }, { status: 403 });
   }
 
   // Build update payload

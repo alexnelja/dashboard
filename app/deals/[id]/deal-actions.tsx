@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getNextStatuses, DEAL_STATUS_LABELS, DEAL_STATUS_COLORS } from '@/lib/deal-helpers';
+import { getNextStatusesForRole, DEAL_STATUS_LABELS, DEAL_STATUS_COLORS } from '@/lib/deal-helpers';
 import type { DealStatus } from '@/lib/types';
 
 interface DealActionsProps {
@@ -15,9 +15,27 @@ export function DealActions({ dealId, currentStatus, isBuyer }: DealActionsProps
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const nextStatuses = getNextStatuses(currentStatus);
+  const role = isBuyer ? 'buyer' as const : 'seller' as const;
+  const nextStatuses = getNextStatusesForRole(currentStatus, role);
 
-  if (nextStatuses.length === 0) return null;
+  if (nextStatuses.length === 0) {
+    // Check if there are actions but not for this role
+    const allNext = getNextStatusesForRole(currentStatus, isBuyer ? 'seller' : 'buyer');
+    if (allNext.length > 0) {
+      return (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Actions</h2>
+          <p className="text-xs text-gray-500">
+            Waiting for the {isBuyer ? 'seller' : 'buyer'} to advance this deal.
+          </p>
+          <p className="text-xs text-gray-600 mt-2">
+            You are the {isBuyer ? 'buyer' : 'seller'} in this deal.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
 
   async function advanceStatus(newStatus: DealStatus) {
     setLoading(true);
