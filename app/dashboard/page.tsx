@@ -5,14 +5,16 @@ import { getDealsByUser } from '@/lib/deal-queries';
 import { DEAL_STATUS_LABELS, DEAL_STATUS_COLORS } from '@/lib/deal-helpers';
 import { COMMODITY_CONFIG } from '@/lib/types';
 import { timeAgo, formatCurrency } from '@/lib/format';
+import { getTrustScoreForUser } from '@/lib/trust-queries';
 
 export default async function DashboardPage() {
   const user = await requireAuth();
 
-  const [listings, requirements, deals] = await Promise.all([
+  const [listings, requirements, deals, trustScore] = await Promise.all([
     getUserListings(user.id),
     getUserRequirements(user.id),
     getDealsByUser(user.id),
+    getTrustScoreForUser(user.id),
   ]);
 
   const activeDeals = deals.filter((d) =>
@@ -244,11 +246,63 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {/* Trust Score — placeholder until Plan 4 */}
+      {/* Trust Score */}
       <div>
         <h2 className="text-base font-semibold text-white mb-3">Trust Score</h2>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-gray-600 text-sm">
-          Reputation and trust scoring coming in Plan 4.
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="flex items-start gap-6">
+            {/* Overall score circle */}
+            <div className="flex-shrink-0 text-center">
+              <div className="relative w-20 h-20">
+                <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                  <circle cx="40" cy="40" r="35" fill="none" stroke="#1f2937" strokeWidth="6" />
+                  <circle
+                    cx="40" cy="40" r="35" fill="none"
+                    stroke={trustScore.badge.tier === 'platinum' ? '#67e8f9' : trustScore.badge.tier === 'gold' ? '#fcd34d' : trustScore.badge.tier === 'silver' ? '#d1d5db' : trustScore.badge.tier === 'bronze' ? '#fb923c' : '#6b7280'}
+                    strokeWidth="6"
+                    strokeDasharray={`${(trustScore.overallPct / 100) * 220} 220`}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-xl font-bold text-white">{trustScore.overall.toFixed(1)}</span>
+                </div>
+              </div>
+              <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full border ${trustScore.badge.bg} ${trustScore.badge.color} ${trustScore.badge.border}`}>
+                {trustScore.badge.label}
+              </span>
+            </div>
+
+            {/* Dimension breakdown */}
+            <div className="flex-1 space-y-2.5">
+              {trustScore.dimensions.map((d) => (
+                <div key={d.dimension}>
+                  <div className="flex items-center justify-between text-xs mb-0.5">
+                    <span className="text-gray-400">{d.label} ({(d.weight * 100).toFixed(0)}%)</span>
+                    <span className="text-white font-medium">{d.bayesianAvg.toFixed(1)} / 5</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-amber-500"
+                      style={{ width: `${(d.bayesianAvg / 5) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Stats */}
+            <div className="flex-shrink-0 text-right space-y-3">
+              <div>
+                <p className="text-xs text-gray-500">Completed Deals</p>
+                <p className="text-lg font-bold text-white">{trustScore.completedDeals}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Ratings Received</p>
+                <p className="text-lg font-bold text-white">{trustScore.ratingCount}</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
