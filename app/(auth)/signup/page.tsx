@@ -4,13 +4,12 @@ import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import type { UserRole } from '@/lib/types';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [companyName, setCompanyName] = useState('');
-  const [role, setRole] = useState<UserRole>('buyer');
+  const [country, setCountry] = useState('ZA');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -36,9 +35,9 @@ export default function SignupPage() {
     if (data.user) {
       const { error: profileError } = await supabase.from('users').insert({
         id: data.user.id,
-        role,
+        role: 'both',  // All users are traders — role is per-deal, not per-user
         company_name: companyName,
-        country: 'ZA',
+        country,
       });
 
       if (profileError) {
@@ -51,12 +50,6 @@ export default function SignupPage() {
     router.push('/map');
     router.refresh();
   }
-
-  const roles: { value: UserRole; label: string; desc: string }[] = [
-    { value: 'buyer', label: 'Buyer', desc: 'I want to purchase materials' },
-    { value: 'seller', label: 'Seller', desc: 'I have materials to sell' },
-    { value: 'both', label: 'Both', desc: 'I buy and sell materials' },
-  ];
 
   return (
     <div className="w-full max-w-sm">
@@ -112,24 +105,29 @@ export default function SignupPage() {
           />
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-2">I am a</label>
-          <div className="grid grid-cols-3 gap-2">
-            {roles.map((r) => (
-              <button
-                key={r.value}
-                type="button"
-                onClick={() => setRole(r.value)}
-                className={`p-3 rounded-lg border text-center transition-colors ${
-                  role === r.value
-                    ? 'border-white bg-gray-800 text-white'
-                    : 'border-gray-800 bg-gray-900 text-gray-400 hover:border-gray-600'
-                }`}
-              >
-                <div className="text-sm font-medium">{r.label}</div>
-                <div className="text-xs text-gray-500 mt-0.5">{r.desc}</div>
-              </button>
-            ))}
-          </div>
+          <label htmlFor="country" className="block text-sm text-gray-400 mb-1">Country</label>
+          <select
+            id="country"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-600"
+          >
+            <option value="ZA">South Africa</option>
+            <option value="CN">China</option>
+            <option value="IN">India</option>
+            <option value="JP">Japan</option>
+            <option value="KR">South Korea</option>
+            <option value="AU">Australia</option>
+            <option value="BR">Brazil</option>
+            <option value="DE">Germany</option>
+            <option value="NL">Netherlands</option>
+            <option value="GB">United Kingdom</option>
+            <option value="US">United States</option>
+            <option value="TR">Turkey</option>
+            <option value="MZ">Mozambique</option>
+            <option value="ZW">Zimbabwe</option>
+            <option value="OTHER">Other</option>
+          </select>
         </div>
         <button
           type="submit"

@@ -1177,8 +1177,8 @@ export function MapClient({ mines, harbours, listings, routes, vessels }: MapCli
         </div>
       )}
 
-      {/* Legend overlay bottom-left of map area */}
-        <div className="absolute bottom-8 left-3 z-10 bg-gray-950/20 border border-white/5 rounded-lg p-3 space-y-2 text-xs backdrop-blur-xl">
+      {/* Legend overlay bottom-right, below layers panel */}
+        <div className="absolute bottom-8 right-4 z-10 bg-gray-950/80 border border-white/5 rounded-lg p-3 space-y-2 text-xs backdrop-blur-xl max-h-[50vh] overflow-y-auto">
           <div className="text-gray-400 font-semibold uppercase tracking-wider mb-1">Legend</div>
           {(Object.entries(COMMODITY_CONFIG) as [CommodityType, { label: string; color: string }][]).map(
             ([, config]) => (

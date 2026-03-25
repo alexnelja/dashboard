@@ -32,7 +32,7 @@ export default async function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">My Dashboard</h1>
           <p className="text-gray-400 text-sm mt-1">
-            {user.company_name} · {user.role}
+            {user.company_name} · {user.country}
           </p>
         </div>
         <div className="flex gap-3">
