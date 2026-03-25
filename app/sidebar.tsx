@@ -2,22 +2,45 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
-const navItems = [
-  { label: 'Map', href: '/map', icon: MapIcon },
-  { label: 'Trading', href: '/trading', icon: TradingIcon },
-  { label: 'Marketplace', href: '/marketplace', icon: MarketplaceIcon },
+const primaryItems = [
   { label: 'Deals', href: '/deals', icon: DealsIcon },
-  { label: 'Vessels', href: '/vessels', icon: VesselsIcon },
+];
+
+const marketItems = [
+  { label: 'Map', href: '/map', icon: MapIcon },
+  { label: 'Listings', href: '/marketplace', icon: MarketplaceIcon },
+  { label: 'Prices', href: '/trading', icon: TradingIcon },
+];
+
+const secondaryItems = [
   { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon },
+  { label: 'Vessels', href: '/vessels', icon: VesselsIcon },
+  { label: 'Intelligence', href: '/intelligence', icon: IntelligenceIcon },
+];
+
+const mobileItems = [
+  { label: 'Deals', href: '/deals', icon: DealsIcon },
+  { label: 'Map', href: '/map', icon: MapIcon },
+  { label: 'Listings', href: '/marketplace', icon: MarketplaceIcon },
+  { label: 'Prices', href: '/trading', icon: TradingIcon },
+  { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon },
+  { label: 'Vessels', href: '/vessels', icon: VesselsIcon },
   { label: 'Intelligence', href: '/intelligence', icon: IntelligenceIcon },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const isMarketActive = pathname.startsWith('/map') || pathname.startsWith('/marketplace') || pathname.startsWith('/trading');
+  const [marketOpen, setMarketOpen] = useState(true);
+
+  function isActive(href: string) {
+    return pathname === href || pathname.startsWith(href + '/');
+  }
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -31,7 +54,7 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex fixed inset-y-0 left-0 w-56 flex-col border-r border-gray-800 bg-gray-950 z-30">
         <div className="px-5 py-6">
-          <Link href="/map" className="flex items-center gap-2">
+          <Link href="/deals" className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-white flex items-center justify-center">
               <span className="text-black text-xs font-bold">M</span>
             </div>
@@ -39,8 +62,9 @@ export function Sidebar() {
           </Link>
         </div>
         <nav className="flex-1 px-3 space-y-0.5">
-          {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + '/');
+          {/* Primary: Deals */}
+          {primaryItems.map((item) => {
+            const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
@@ -56,6 +80,59 @@ export function Sidebar() {
               </Link>
             );
           })}
+
+          {/* Market section */}
+          <div className="pt-3">
+            <button
+              onClick={() => setMarketOpen(!marketOpen)}
+              className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-400 transition-colors"
+            >
+              Market
+              <span className="text-gray-600">{marketOpen ? '\u25BE' : '\u25B8'}</span>
+            </button>
+            {marketOpen && (
+              <div className="ml-2 space-y-0.5">
+                {marketItems.map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        active
+                          ? 'bg-gray-800 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-900'
+                      }`}
+                    >
+                      <item.icon active={active} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Divider + Secondary */}
+          <div className="pt-3 mt-3 border-t border-gray-800">
+            {secondaryItems.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-gray-800 text-white'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-900'
+                  }`}
+                >
+                  <item.icon active={active} />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </div>
         </nav>
         <div className="px-3 py-4 border-t border-gray-800">
           <button
@@ -70,15 +147,15 @@ export function Sidebar() {
 
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 inset-x-0 h-14 border-b border-gray-800 bg-gray-950/80 backdrop-blur-md z-30 flex items-center px-4 gap-4">
-        <Link href="/map" className="flex items-center gap-2">
+        <Link href="/deals" className="flex items-center gap-2">
           <div className="w-6 h-6 rounded bg-white flex items-center justify-center">
             <span className="text-black text-xs font-bold">M</span>
           </div>
           <span className="font-semibold text-sm">MineMarket</span>
         </Link>
         <nav className="flex gap-1 ml-4 flex-1 min-w-0 overflow-x-auto">
-          {navItems.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href + '/');
+          {mobileItems.map((item) => {
+            const active = isActive(item.href);
             return (
               <Link
                 key={item.href}
