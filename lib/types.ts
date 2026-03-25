@@ -60,6 +60,7 @@ export interface Listing {
   seller_id: string;
   source_mine_id: string;
   commodity_type: CommodityType;
+  commodity_subtype: string | null;
   spec_sheet: Record<string, number>;
   volume_tonnes: number;
   price_per_tonne: number;
@@ -71,6 +72,8 @@ export interface Listing {
   max_buyers: number | null;
   preferred_buyer_ids: string[];
   status: ListingStatus;
+  price_confidence: string | null;
+  price_breakdown: Record<string, unknown>[] | null;
   created_at: string;
 }
 

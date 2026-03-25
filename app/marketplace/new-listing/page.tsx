@@ -7,6 +7,9 @@ import { COMMODITY_CONFIG } from '@/lib/types';
 import type { CommodityType, CurrencyType } from '@/lib/types';
 import { INCOTERMS, INCOTERM_DESCRIPTIONS } from '@/lib/incoterms';
 import { SPEC_FIELDS } from '@/lib/spec-fields';
+import { getSubtypesForCommodity, getSubtypeByKey } from '@/lib/commodity-subtypes';
+import type { CommoditySubtype } from '@/lib/commodity-subtypes';
+import type { PriceEstimate } from '@/lib/price-engine';
 
 const CURRENCIES: CurrencyType[] = ['USD', 'ZAR', 'EUR'];
 
@@ -19,9 +22,16 @@ interface MineOption {
   harbour_name: string | null;
 }
 
+const CONFIDENCE_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+  high: { bg: 'bg-green-900/40', text: 'text-green-400', label: 'High confidence' },
+  medium: { bg: 'bg-amber-900/40', text: 'text-amber-400', label: 'Medium confidence' },
+  low: { bg: 'bg-red-900/40', text: 'text-red-400', label: 'Low confidence' },
+};
+
 export default function NewListingPage() {
   const router = useRouter();
   const [commodity, setCommodity] = useState<CommodityType | null>(null);
+  const [selectedSubtype, setSelectedSubtype] = useState<string | null>(null);
   const [price, setPrice] = useState('');
   const [volume, setVolume] = useState('');
   const [currency, setCurrency] = useState<CurrencyType>('USD');
@@ -32,6 +42,25 @@ export default function NewListingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [allMines, setAllMines] = useState<MineOption[]>([]);
   const [selectedMineId, setSelectedMineId] = useState<string | null>(null);
+
+  // Price estimate state
+  const [priceEstimate, setPriceEstimate] = useState<PriceEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
+
+  // Get available subtypes for selected commodity
+  const availableSubtypes: CommoditySubtype[] = commodity
+    ? getSubtypesForCommodity(commodity)
+    : [];
+
+  // Get the active subtype config
+  const subtypeConfig = selectedSubtype ? getSubtypeByKey(selectedSubtype) : null;
+
+  // Determine which spec fields to show: prefer subtype-specific fields, fall back to commodity defaults
+  const activeSpecFields = subtypeConfig
+    ? subtypeConfig.specFields
+    : commodity
+      ? SPEC_FIELDS[commodity]
+      : [];
 
   // Fetch all mines for this user on mount
   useEffect(() => {
@@ -81,11 +110,19 @@ export default function NewListingPage() {
   function handleCommoditySelect(type: CommodityType) {
     setCommodity(type);
     setSpecs({});
+    setSelectedSubtype(null);
+    setPriceEstimate(null);
     const mine = allMines.find((m) => m.id === selectedMineId);
     if (mine && !mine.commodities.includes(type)) {
       setSelectedMineId(null);
       setLoadingPortName(null);
     }
+  }
+
+  function handleSubtypeSelect(subtypeKey: string) {
+    setSelectedSubtype(subtypeKey);
+    setSpecs({});
+    setPriceEstimate(null);
   }
 
   function toggleIncoterm(term: string) {
@@ -105,6 +142,48 @@ export default function NewListingPage() {
       return `${term} ${loadingPortName}`;
     }
     return term;
+  }
+
+  // Price estimation
+  async function handleEstimatePrice() {
+    if (!commodity || !selectedSubtype) return;
+
+    // Find the primary grade field from the subtype spec
+    const gradeField = activeSpecFields[0];
+    const gradeValue = gradeField ? parseFloat(specs[gradeField.key] ?? '') : NaN;
+
+    if (isNaN(gradeValue) || gradeValue <= 0) {
+      setError(`Please enter a valid ${gradeField?.label ?? 'grade'} value to estimate price.`);
+      return;
+    }
+
+    setEstimating(true);
+    setError(null);
+
+    try {
+      const params = new URLSearchParams({
+        commodity,
+        subtype: selectedSubtype,
+        grade: String(gradeValue),
+        incoterm: selectedIncoterms[0] ?? 'FOB',
+        loading_port: loadingPortName ?? '',
+        volume: volume || '10000',
+      });
+
+      const res = await fetch(`/api/price-estimate?${params}`);
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error ?? 'Failed to estimate price');
+        return;
+      }
+
+      const estimate: PriceEstimate = await res.json();
+      setPriceEstimate(estimate);
+    } catch {
+      setError('Failed to connect to price estimation service.');
+    } finally {
+      setEstimating(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -141,15 +220,13 @@ export default function NewListingPage() {
     }
 
     // Validate spec sheet: no negative values for percentage fields
-    if (commodity) {
-      for (const field of SPEC_FIELDS[commodity]) {
-        const val = specs[field.key];
-        if (val !== undefined && val !== '') {
-          const num = parseFloat(val);
-          if (isNaN(num) || num < 0) {
-            setError(`${field.label} must be a non-negative number`);
-            return;
-          }
+    for (const field of activeSpecFields) {
+      const val = specs[field.key];
+      if (val !== undefined && val !== '') {
+        const num = parseFloat(val);
+        if (isNaN(num) || num < 0) {
+          setError(`${field.label} must be a non-negative number`);
+          return;
         }
       }
     }
@@ -189,12 +266,10 @@ export default function NewListingPage() {
 
       // Build spec_sheet from filled-in values
       const spec_sheet: Record<string, number> = {};
-      if (commodity) {
-        for (const field of SPEC_FIELDS[commodity]) {
-          const val = specs[field.key];
-          if (val !== undefined && val !== '') {
-            spec_sheet[field.key] = parseFloat(val);
-          }
+      for (const field of activeSpecFields) {
+        const val = specs[field.key];
+        if (val !== undefined && val !== '') {
+          spec_sheet[field.key] = parseFloat(val);
         }
       }
 
@@ -202,6 +277,7 @@ export default function NewListingPage() {
         seller_id: authUser.id,
         source_mine_id: mine.id,
         commodity_type: commodity,
+        commodity_subtype: selectedSubtype,
         spec_sheet,
         volume_tonnes: volumeNum,
         price_per_tonne: priceNum,
@@ -213,6 +289,8 @@ export default function NewListingPage() {
         max_buyers: null,
         preferred_buyer_ids: [],
         status: 'active',
+        price_confidence: priceEstimate?.confidence ?? 'manual',
+        price_breakdown: priceEstimate?.breakdown ?? null,
       });
 
       if (insertError) {
@@ -261,6 +339,32 @@ export default function NewListingPage() {
           </div>
         </div>
 
+        {/* Subtype selector */}
+        {commodity && availableSubtypes.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Subtype</label>
+            <select
+              value={selectedSubtype ?? ''}
+              onChange={(e) => handleSubtypeSelect(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
+            >
+              <option value="" disabled>Select a subtype...</option>
+              {availableSubtypes.map((st) => (
+                <option key={st.key} value={st.key}>
+                  {st.label} ({st.gradeRange})
+                </option>
+              ))}
+            </select>
+            {subtypeConfig && (
+              <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+                <span>Use: {subtypeConfig.primaryUse}</span>
+                <span>|</span>
+                <span>Index: {subtypeConfig.priceIndex}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Mine selector */}
         {availableMines.length > 0 && (
           <div>
@@ -270,7 +374,7 @@ export default function NewListingPage() {
               onChange={(e) => handleMineSelect(e.target.value)}
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-gray-500"
             >
-              <option value="" disabled>Select a mine…</option>
+              <option value="" disabled>Select a mine...</option>
               {availableMines.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} — {m.region}{m.harbour_name ? ` (loading: ${m.harbour_name})` : ''}
@@ -292,15 +396,24 @@ export default function NewListingPage() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Price per tonne</label>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="e.g. 185.00"
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="e.g. 185.00"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
+              />
+            </div>
+            {priceEstimate && (
+              <div className="mt-1 flex items-center gap-2">
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${CONFIDENCE_BADGE[priceEstimate.confidence].bg} ${CONFIDENCE_BADGE[priceEstimate.confidence].text} border-current`}>
+                  {CONFIDENCE_BADGE[priceEstimate.confidence].label}
+                </span>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Volume (tonnes)</label>
@@ -315,6 +428,53 @@ export default function NewListingPage() {
             />
           </div>
         </div>
+
+        {/* Estimate Price button */}
+        {commodity && selectedSubtype && (
+          <div>
+            <button
+              type="button"
+              onClick={handleEstimatePrice}
+              disabled={estimating}
+              className="border border-blue-600 text-blue-400 hover:bg-blue-900/20 disabled:opacity-50 font-medium px-4 py-2 rounded-lg text-sm transition-colors"
+            >
+              {estimating ? 'Estimating...' : 'Estimate Price'}
+            </button>
+
+            {/* Price estimate breakdown */}
+            {priceEstimate && (
+              <div className="mt-3 bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-white">Price Estimate</h3>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${CONFIDENCE_BADGE[priceEstimate.confidence].bg} ${CONFIDENCE_BADGE[priceEstimate.confidence].text}`}>
+                    {CONFIDENCE_BADGE[priceEstimate.confidence].label}
+                  </span>
+                </div>
+                <div className="text-amber-400 text-lg font-bold mb-3">
+                  ${priceEstimate.estimatedPrice.toLocaleString()} / t
+                </div>
+                <div className="space-y-1.5">
+                  {priceEstimate.breakdown.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">{item.label}</span>
+                      <div className="text-right">
+                        <span className="text-white">{item.value}</span>
+                        <span className="text-gray-600 ml-2">{item.note}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPrice(String(priceEstimate.estimatedPrice))}
+                  className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  Use this price
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Currency selector */}
         <div>
@@ -386,16 +546,18 @@ export default function NewListingPage() {
           )}
         </div>
 
-        {/* Commodity-specific spec fields */}
-        {commodity && (
+        {/* Commodity-specific spec fields (from subtype or commodity default) */}
+        {commodity && activeSpecFields.length > 0 && (
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-3">
-              Spec Sheet — {COMMODITY_CONFIG[commodity].label}
+              Spec Sheet — {subtypeConfig?.label ?? COMMODITY_CONFIG[commodity].label}
             </label>
             <div className="grid grid-cols-2 gap-4">
-              {SPEC_FIELDS[commodity].map((field) => (
+              {activeSpecFields.map((field) => (
                 <div key={field.key}>
-                  <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    {field.label}{('unit' in field && field.unit) ? ` (${field.unit})` : ''}
+                  </label>
                   <input
                     type="number"
                     min="0"
@@ -425,7 +587,7 @@ export default function NewListingPage() {
             disabled={submitting}
             className="bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-semibold px-6 py-2.5 rounded-lg text-sm transition-colors"
           >
-            {submitting ? 'Creating…' : 'Create Listing'}
+            {submitting ? 'Creating...' : 'Create Listing'}
           </button>
           <button
             type="button"

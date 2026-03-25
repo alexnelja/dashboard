@@ -6,6 +6,7 @@ import { COMMODITY_CONFIG } from '@/lib/types';
 import { timeAgo } from '@/lib/format';
 import { ExpressInterestButton } from './express-interest-button';
 import { SPEC_LABELS } from '@/lib/spec-fields';
+import { SUBTYPE_LABELS } from '@/lib/commodity-subtypes';
 import { MarineWeatherCard } from '@/app/vessels/marine-weather-card';
 import { estimateRoute, formatDistance, COMMON_DESTINATIONS } from '@/lib/distance';
 
@@ -27,6 +28,22 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   ]);
 
   const config = COMMODITY_CONFIG[listing.commodity_type];
+
+  // Subtype and price confidence from new columns (may not exist on older listings)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const listingAny = listing as any;
+  const subtypeKey: string | null = listingAny.commodity_subtype ?? null;
+  const subtypeLabel = subtypeKey ? SUBTYPE_LABELS[subtypeKey] ?? null : null;
+  const priceConfidence: string | null = listingAny.price_confidence ?? null;
+  const priceBreakdown: { label: string; value: number; note: string }[] | null =
+    listingAny.price_breakdown ?? null;
+
+  const confidenceBadge: Record<string, { bg: string; text: string; border: string; label: string }> = {
+    high: { bg: 'bg-green-900/40', text: 'text-green-400', border: 'border-green-800', label: 'High confidence' },
+    medium: { bg: 'bg-amber-900/40', text: 'text-amber-400', border: 'border-amber-800', label: 'Medium confidence' },
+    low: { bg: 'bg-red-900/40', text: 'text-red-400', border: 'border-red-800', label: 'Low confidence' },
+    manual: { bg: 'bg-gray-800', text: 'text-gray-400', border: 'border-gray-700', label: 'Manual price' },
+  };
 
   const specEntries = Object.entries(listing.spec_sheet).filter(
     ([, value]) => value !== null && value !== undefined
@@ -53,6 +70,11 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-xl font-bold text-white">{config.label}</h1>
+                {subtypeLabel && (
+                  <span className="text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-full px-2 py-0.5">
+                    {subtypeLabel}
+                  </span>
+                )}
                 {listing.is_verified && (
                   <span className="text-xs bg-green-900/40 text-green-400 border border-green-800 rounded-full px-2 py-0.5">
                     Verified
@@ -74,6 +96,11 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
             <div className="text-amber-400 text-2xl font-bold">
               {listing.currency} {listing.price_per_tonne.toLocaleString()} / t
             </div>
+            {priceConfidence && confidenceBadge[priceConfidence] && (
+              <span className={`text-xs px-2 py-0.5 rounded-full border mt-1 inline-block ${confidenceBadge[priceConfidence].bg} ${confidenceBadge[priceConfidence].text} ${confidenceBadge[priceConfidence].border}`}>
+                {confidenceBadge[priceConfidence].label}
+              </span>
+            )}
             <div className="text-gray-500 text-xs mt-1">{timeAgo(listing.created_at)}</div>
           </div>
         </div>
@@ -138,6 +165,24 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
               <div key={key}>
                 <p className="text-xs text-gray-500 mb-0.5">{SPEC_LABELS[key] ?? key}</p>
                 <p className="text-sm text-white">{String(value)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Price vs Index (if price breakdown available) */}
+      {priceBreakdown && priceBreakdown.length > 0 && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Price vs Index</h2>
+          <div className="space-y-2">
+            {priceBreakdown.map((item, i) => (
+              <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-800 last:border-0">
+                <span className="text-sm text-gray-400">{item.label}</span>
+                <div className="text-right">
+                  <span className="text-sm text-white font-medium">{item.value}</span>
+                  <span className="text-xs text-gray-600 ml-2">{item.note}</span>
+                </div>
               </div>
             ))}
           </div>
