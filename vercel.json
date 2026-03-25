@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/vessels",
-      "schedule": "0 */6 * * *"
+      "path": "/api/cron/refresh",
+      "schedule": "0 6 * * *"
     }
   ]
 }
