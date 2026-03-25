@@ -5,51 +5,10 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
 import { COMMODITY_CONFIG } from '@/lib/types';
 import type { CommodityType, CurrencyType } from '@/lib/types';
+import { INCOTERMS, INCOTERM_DESCRIPTIONS } from '@/lib/incoterms';
+import { SPEC_FIELDS } from '@/lib/spec-fields';
 
-const INCOTERMS = ['FOB', 'CIF', 'CFR', 'EXW', 'DDP', 'FCA', 'DAP'] as const;
 const CURRENCIES: CurrencyType[] = ['USD', 'ZAR', 'EUR'];
-
-const INCOTERM_DESCRIPTIONS: Record<string, { short: string; context: 'loading' | 'delivery' }> = {
-  FOB: { short: 'Free On Board — seller delivers to loading port', context: 'loading' },
-  CIF: { short: 'Cost, Insurance & Freight — seller pays freight + insurance to destination', context: 'delivery' },
-  CFR: { short: 'Cost & Freight — seller pays freight to destination, no insurance', context: 'delivery' },
-  EXW: { short: 'Ex Works — buyer arranges all transport from mine', context: 'loading' },
-  DDP: { short: 'Delivered Duty Paid — seller delivers to buyer\'s location, all costs', context: 'delivery' },
-  FCA: { short: 'Free Carrier — seller delivers to carrier at named place', context: 'loading' },
-  DAP: { short: 'Delivered At Place — seller delivers to destination, not unloaded', context: 'delivery' },
-};
-
-const SPEC_FIELDS: Record<CommodityType, { key: string; label: string }[]> = {
-  chrome: [
-    { key: 'cr2o3_pct', label: 'Cr₂O₃ (%)' },
-    { key: 'fe_pct', label: 'Fe (%)' },
-    { key: 'sio2_pct', label: 'SiO₂ (%)' },
-    { key: 'moisture_pct', label: 'Moisture (%)' },
-  ],
-  manganese: [
-    { key: 'mn_pct', label: 'Mn (%)' },
-    { key: 'fe_pct', label: 'Fe (%)' },
-    { key: 'sio2_pct', label: 'SiO₂ (%)' },
-    { key: 'moisture_pct', label: 'Moisture (%)' },
-  ],
-  iron_ore: [
-    { key: 'fe_pct', label: 'Fe (%)' },
-    { key: 'sio2_pct', label: 'SiO₂ (%)' },
-    { key: 'al2o3_pct', label: 'Al₂O₃ (%)' },
-    { key: 'moisture_pct', label: 'Moisture (%)' },
-  ],
-  coal: [
-    { key: 'cv_kcal', label: 'Calorific Value (kcal/kg)' },
-    { key: 'ash_pct', label: 'Ash (%)' },
-    { key: 'volatile_pct', label: 'Volatile Matter (%)' },
-    { key: 'moisture_pct', label: 'Moisture (%)' },
-  ],
-  aggregates: [
-    { key: 'particle_size_mm', label: 'Particle Size (mm)' },
-    { key: 'density', label: 'Density (t/m³)' },
-    { key: 'moisture_pct', label: 'Moisture (%)' },
-  ],
-};
 
 interface MineOption {
   id: string;

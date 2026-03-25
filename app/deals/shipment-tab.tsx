@@ -7,6 +7,7 @@ import { ShipmentCard } from './shipment-card';
 import { COMMODITY_CONFIG } from '@/lib/types';
 import type { DealWithDetails } from '@/lib/deal-queries';
 import type { DealMilestone, GeoPoint } from '@/lib/types';
+import { MAP_CONFIG, SHIPMENT_CONFIG } from '@/lib/constants';
 
 interface ShipmentTabProps {
   deals: DealWithDetails[];
@@ -34,8 +35,8 @@ export function ShipmentTab({ deals, milestonesMap, harbourLocations, mineLocati
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: [35, -10],
-      zoom: 3,
+      center: MAP_CONFIG.SHIPMENT_CENTER as [number, number],
+      zoom: MAP_CONFIG.SHIPMENT_ZOOM,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
@@ -110,9 +111,9 @@ export function ShipmentTab({ deals, milestonesMap, harbourLocations, mineLocati
 
         // Estimate position along route based on milestones
         const milestones = milestonesMap[deal.id] ?? [];
-        const progress = milestones.length / 6; // rough progress
-        const lng = mineLoc.lng + (harbourLoc.lng - mineLoc.lng) * Math.min(progress, 0.95);
-        const lat = mineLoc.lat + (harbourLoc.lat - mineLoc.lat) * Math.min(progress, 0.95);
+        const progress = milestones.length / SHIPMENT_CONFIG.TOTAL_MILESTONES; // rough progress
+        const lng = mineLoc.lng + (harbourLoc.lng - mineLoc.lng) * Math.min(progress, SHIPMENT_CONFIG.MAX_PROGRESS_RATIO);
+        const lat = mineLoc.lat + (harbourLoc.lat - mineLoc.lat) * Math.min(progress, SHIPMENT_CONFIG.MAX_PROGRESS_RATIO);
 
         const config = COMMODITY_CONFIG[deal.commodity_type];
         const el = document.createElement('div');
@@ -120,10 +121,10 @@ export function ShipmentTab({ deals, milestonesMap, harbourLocations, mineLocati
           width: 12px; height: 12px;
           background: ${config.color};
           border-radius: 50%;
-          border: 2px solid #0f172a;
+          border: 2px solid ${SHIPMENT_CONFIG.MARKER_BORDER_COLOR};
           box-shadow: 0 0 12px ${config.color}88;
           cursor: pointer;
-          animation: pulse 2s ease-in-out infinite;
+          animation: ${SHIPMENT_CONFIG.PULSE_ANIMATION};
         `;
 
         const marker = new mapboxgl.Marker(el)
@@ -150,7 +151,7 @@ export function ShipmentTab({ deals, milestonesMap, harbourLocations, mineLocati
     if (!deal) return;
     const harbourLoc = harbourLocations[deal.harbour_name];
     if (harbourLoc) {
-      map.current.flyTo({ center: [harbourLoc.lng, harbourLoc.lat], zoom: 5, duration: 1000 });
+      map.current.flyTo({ center: [harbourLoc.lng, harbourLoc.lat], zoom: MAP_CONFIG.FLY_TO_ZOOM, duration: MAP_CONFIG.FLY_DURATION_MS });
     }
   }, [selectedDealId, transitDeals, harbourLocations]);
 

@@ -5,23 +5,7 @@ import { getSellerTrustScore, getListingVerifications } from '@/lib/trust-querie
 import { COMMODITY_CONFIG } from '@/lib/types';
 import { timeAgo } from '@/lib/format';
 import { ExpressInterestButton } from './express-interest-button';
-
-const SPEC_LABELS: Record<string, string> = {
-  cr2o3_pct: 'Cr₂O₃ (%)',
-  fe_pct: 'Fe (%)',
-  sio2_pct: 'SiO₂ (%)',
-  al2o3_pct: 'Al₂O₃ (%)',
-  moisture_pct: 'Moisture (%)',
-  mn_pct: 'Mn (%)',
-  cv_kcal: 'Calorific Value (kcal/kg)',
-  ash_pct: 'Ash (%)',
-  volatile_pct: 'Volatile Matter (%)',
-  particle_size_mm: 'Particle Size (mm)',
-  density: 'Density (t/m³)',
-  size_mm: 'Size (mm)',
-  aav: 'AAV',
-  crushing_value: 'Crushing Value',
-};
+import { SPEC_LABELS } from '@/lib/spec-fields';
 
 interface ListingDetailPageProps {
   params: Promise<{ id: string }>;

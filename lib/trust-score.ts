@@ -1,9 +1,10 @@
 // lib/trust-score.ts
 
 import type { Rating } from './types';
+import { TRUST_CONFIG } from './constants';
 
 // Bayesian confidence threshold
-const M = 10;
+const M = TRUST_CONFIG.BAYESIAN_CONFIDENCE_M;
 
 // Dimension weights (must sum to 1.0)
 export const TRUST_DIMENSIONS = {
@@ -76,7 +77,7 @@ export function computeTrustScore(
   ratings: Rating[],
   completedDeals: number,
   disputedDeals: number,
-  platformAvg: number = 3.0,
+  platformAvg: number = TRUST_CONFIG.PLATFORM_DEFAULT_SCORE,
 ): TrustScore {
   const n = ratings.length;
 
@@ -89,7 +90,7 @@ export function computeTrustScore(
   // Dispute history: 5 = no disputes, decreases with dispute ratio
   // If 0 completed deals, default to platform average
   const disputeRatio = completedDeals > 0 ? disputedDeals / completedDeals : 0;
-  const disputeScore = Math.max(1, 5 * (1 - disputeRatio * 2)); // each dispute costs 10% of 5 points
+  const disputeScore = Math.max(TRUST_CONFIG.MIN_SCORE, TRUST_CONFIG.MAX_SCORE * (1 - disputeRatio * TRUST_CONFIG.DISPUTE_PENALTY_MULTIPLIER)); // each dispute costs 10% of max points
 
   const rawScores: Record<TrustDimension, number> = {
     spec_accuracy: specAvg,
@@ -121,7 +122,7 @@ export function computeTrustScore(
 
   return {
     overall: overallRounded,
-    overallPct: Math.round((overallRounded / 5) * 100),
+    overallPct: Math.round((overallRounded / TRUST_CONFIG.MAX_SCORE) * 100),
     dimensions,
     completedDeals,
     ratingCount: n,

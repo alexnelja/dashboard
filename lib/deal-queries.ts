@@ -2,6 +2,7 @@ import { createServerSupabaseClient, createAdminSupabaseClient } from './supabas
 import type {
   Deal, DealMilestone, DealDocument, Rating, CommodityType,
 } from './types';
+import { PAGINATION } from './constants';
 
 // Extended deal with joined counterparty and listing info
 export interface DealWithDetails extends Deal {
@@ -141,7 +142,7 @@ export async function getCompletedDeals(commodity?: CommodityType): Promise<Deal
     .select('*')
     .in('status', ['completed', 'escrow_released'])
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(PAGINATION.COMPLETED_DEALS_LIMIT);
 
   if (commodity) {
     query = query.eq('commodity_type', commodity);
@@ -169,8 +170,8 @@ export async function getTradingStats(commodity: CommodityType) {
     .eq('commodity_type', commodity)
     .not('status', 'in', '("completed","cancelled","disputed")');
 
-  // Recent completed deals (last 30 days)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // Recent completed deals
+  const thirtyDaysAgo = new Date(Date.now() - PAGINATION.RECENT_DEALS_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: recentDeals } = await supabase
     .from('deals')
     .select('agreed_price, volume_tonnes, created_at')

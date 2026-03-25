@@ -60,7 +60,7 @@ async function sendEmail(to: string, subject: string, html: string) {
       Authorization: `Bearer ${RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      from: "MineMarket <notifications@minemarket.app>",
+      from: "MineMarket <onboarding@resend.dev>",
       to: [to],
       subject,
       html,

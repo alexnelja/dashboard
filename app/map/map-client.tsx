@@ -8,6 +8,7 @@ import { COMMODITY_CONFIG, MineWithGeo, HarbourWithGeo, ListingWithDetails, Comm
 import { fetchRoadRoute, generateOceanRoute, RouteSegment } from '@/lib/routes';
 import type { RouteRow } from '@/lib/queries';
 import { TRANSNET_RAIL_NETWORK, RAIL_COLORS, RAIL_WIDTHS, RAIL_LABELS, type RailLine } from '@/lib/transnet-rail';
+import { MAP_CONFIG } from '@/lib/constants';
 import { COMMODITY_CORRIDORS, type CommodityCorridor } from '@/lib/commodity-corridors';
 import { ListingsPanel } from './listings-panel';
 import { FilterBar, Filters } from './filter-bar';
@@ -108,8 +109,8 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: 'mapbox://styles/mapbox/dark-v11',
-      center: [26, -29],
-      zoom: 5,
+      center: MAP_CONFIG.SA_CENTER as [number, number],
+      zoom: MAP_CONFIG.SA_ZOOM,
     });
 
     mapRef.current = map;
