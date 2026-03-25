@@ -75,7 +75,7 @@ export function Sidebar() {
           </div>
           <span className="font-semibold text-sm">MineMarket</span>
         </Link>
-        <nav className="flex gap-1 ml-4 overflow-x-auto">
+        <nav className="flex gap-1 ml-4 flex-1 min-w-0 overflow-x-auto">
           {navItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(item.href + '/');
             return (
