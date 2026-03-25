@@ -148,14 +148,11 @@ export default function NewListingPage() {
   async function handleEstimatePrice() {
     if (!commodity || !selectedSubtype) return;
 
-    // Find the primary grade field from the subtype spec
+    // Find the primary grade field from the subtype spec — use it if filled, otherwise omit
+    // so the API uses the index grade as default
     const gradeField = activeSpecFields[0];
     const gradeValue = gradeField ? parseFloat(specs[gradeField.key] ?? '') : NaN;
-
-    if (isNaN(gradeValue) || gradeValue <= 0) {
-      setError(`Please enter a valid ${gradeField?.label ?? 'grade'} value to estimate price.`);
-      return;
-    }
+    const hasGrade = !isNaN(gradeValue) && gradeValue > 0;
 
     setEstimating(true);
     setError(null);
@@ -164,7 +161,7 @@ export default function NewListingPage() {
       const params = new URLSearchParams({
         commodity,
         subtype: selectedSubtype,
-        grade: String(gradeValue),
+        ...(hasGrade ? { grade: String(gradeValue) } : {}),
         incoterm: selectedIncoterms[0] ?? 'FOB',
         loading_port: loadingPortName ?? '',
         volume: volume || '10000',

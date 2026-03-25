@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { estimatePrice } from '@/lib/price-engine';
 import { getSubtypeByKey } from '@/lib/commodity-subtypes';
+import { parseGeoPoint } from '@/lib/geo';
 import type { CommodityType } from '@/lib/types';
 
 export async function GET(request: NextRequest) {
@@ -8,25 +10,19 @@ export async function GET(request: NextRequest) {
 
   const commodity = params.get('commodity') as CommodityType | null;
   const subtype = params.get('subtype');
-  const grade = parseFloat(params.get('grade') ?? '');
+  const gradeRaw = params.get('grade');
+  const grade = gradeRaw ? parseFloat(gradeRaw) : NaN;
   const incoterm = params.get('incoterm') ?? 'FOB';
   const loadingPort = params.get('loading_port') ?? '';
   const destLat = params.get('dest_lat') ? parseFloat(params.get('dest_lat')!) : undefined;
   const destLng = params.get('dest_lng') ? parseFloat(params.get('dest_lng')!) : undefined;
-  const loadingLat = params.get('loading_lat') ? parseFloat(params.get('loading_lat')!) : undefined;
-  const loadingLng = params.get('loading_lng') ? parseFloat(params.get('loading_lng')!) : undefined;
+  let loadingLat = params.get('loading_lat') ? parseFloat(params.get('loading_lat')!) : undefined;
+  let loadingLng = params.get('loading_lng') ? parseFloat(params.get('loading_lng')!) : undefined;
   const volume = parseFloat(params.get('volume') ?? '10000');
 
   if (!commodity || !subtype) {
     return NextResponse.json(
       { error: 'Missing required parameters: commodity, subtype' },
-      { status: 400 },
-    );
-  }
-
-  if (isNaN(grade) || grade <= 0) {
-    return NextResponse.json(
-      { error: 'Invalid or missing grade parameter' },
       { status: 400 },
     );
   }
@@ -44,10 +40,22 @@ export async function GET(request: NextRequest) {
   // For now we use placeholder index values per commodity.
   const indexDefaults = getIndexDefaults(commodity, subtype);
 
+  // If grade not provided, fall back to the index grade (estimate at reference quality)
+  const effectiveGrade = (!isNaN(grade) && grade > 0) ? grade : indexDefaults.indexGrade;
+
+  // If loading port name is provided but no coordinates, look up from harbours table
+  if (loadingPort && (loadingLat == null || loadingLng == null)) {
+    const coords = await lookupHarbourCoords(loadingPort);
+    if (coords) {
+      loadingLat = coords.lat;
+      loadingLng = coords.lng;
+    }
+  }
+
   const estimate = estimatePrice({
     commodity,
     subtype,
-    grade,
+    grade: effectiveGrade,
     indexGrade: indexDefaults.indexGrade,
     indexPrice: indexDefaults.indexPrice,
     indexDate: indexDefaults.indexDate,
@@ -67,6 +75,32 @@ export async function GET(request: NextRequest) {
     priceIndex: subtypeConfig.priceIndex,
     priceIndexType: subtypeConfig.priceIndexType,
   });
+}
+
+/**
+ * Look up harbour coordinates by name from the harbours table.
+ * Uses the admin client since this is a server-side API route.
+ */
+async function lookupHarbourCoords(name: string): Promise<{ lat: number; lng: number } | null> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+
+  const supabase = createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data } = await supabase
+    .from('harbours')
+    .select('location')
+    .ilike('name', name)
+    .limit(1)
+    .single();
+
+  if (!data?.location) return null;
+
+  const point = parseGeoPoint(data.location);
+  return point ?? null;
 }
 
 /**
