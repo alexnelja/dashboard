@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Marketplace', href: '/marketplace', icon: MarketplaceIcon },
   { label: 'Deals', href: '/deals', icon: DealsIcon },
   { label: 'Dashboard', href: '/dashboard', icon: DashboardIcon },
+  { label: 'Intelligence', href: '/intelligence', icon: IntelligenceIcon },
 ];
 
 export function Sidebar() {
@@ -143,6 +144,16 @@ function DashboardIcon({ active }: { active: boolean }) {
       <rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
       <rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
       <rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+function IntelligenceIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={active ? 'text-white' : 'text-gray-500'}>
+      <path d="M2 13V7H5V13H2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M6.5 13V4H9.5V13H6.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M11 13V1H14V13H11Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }
