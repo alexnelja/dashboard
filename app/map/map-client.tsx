@@ -75,16 +75,30 @@ function getPrimarySpec(commodity: string, spec: Record<string, number>): string
   return entry ? `${entry[1]}%` : '';
 }
 
+interface VesselPosition {
+  mmsi: string;
+  name: string;
+  lat: number;
+  lng: number;
+  speed: number;
+  course: number;
+  heading: number;
+  ship_type: number;
+  destination: string | null;
+  last_seen: string;
+}
+
 interface MapClientProps {
   mines: MineWithGeo[];
   harbours: HarbourWithGeo[];
   listings: ListingWithDetails[];
   routes: RouteRow[];
+  vessels: VesselPosition[];
 }
 
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!;
 
-export function MapClient({ mines, harbours, listings, routes }: MapClientProps) {
+export function MapClient({ mines, harbours, listings, routes, vessels }: MapClientProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -103,8 +117,10 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     corridors: true,
     roads: true,
     ocean: true,
+    vessels: true,
   });
   const mineMarkersRef = useRef<mapboxgl.Marker[]>([]);
+  const vesselMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const harbourMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const corridorSourcesRef = useRef<string[]>([]);
   const savedViewRef = useRef<{ center: [number, number]; zoom: number; pitch: number } | null>(null);
@@ -391,11 +407,55 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
           el.style.width = `${portSize}px`;
           el.style.height = `${portSize}px`;
         });
+
+        // Vessels: tiny at low zoom, visible at high zoom
+        const vesselSize = Math.max(2, Math.min(10, zoom * 0.8));
+        vesselMarkersRef.current.forEach(m => {
+          const el = m.getElement();
+          el.style.width = `${vesselSize}px`;
+          el.style.height = `${vesselSize}px`;
+        });
       }
 
       map.on('zoom', updateMarkerSizes);
       // Initial sizing
       updateMarkerSizes();
+
+      // --- Vessel markers (live AIS) ---
+      for (const vessel of vessels) {
+        if (!vessel.lat || !vessel.lng) continue;
+        // Ship type: 70-79 = cargo, 80-89 = tanker
+        const isBulk = vessel.ship_type >= 70 && vessel.ship_type < 80;
+        const isTanker = vessel.ship_type >= 80 && vessel.ship_type < 90;
+        const color = isBulk ? '#f59e0b' : isTanker ? '#60a5fa' : '#6b7280';
+
+        const el = document.createElement('div');
+        el.style.width = '5px';
+        el.style.height = '5px';
+        el.style.borderRadius = '50%';
+        el.style.backgroundColor = color;
+        el.style.opacity = '0.7';
+        el.style.cursor = 'pointer';
+        el.className = 'vessel-marker';
+
+        const popup = new mapboxgl.Popup({ offset: 8, closeButton: false })
+          .setHTML(`
+            <div style="font-family:sans-serif;padding:2px;">
+              <div style="font-weight:600;font-size:12px;color:#f9fafb;">${vessel.name || 'Unknown'}</div>
+              <div style="font-size:11px;color:#9ca3af;">MMSI: ${vessel.mmsi}</div>
+              <div style="font-size:11px;color:#9ca3af;">${vessel.speed?.toFixed(1) ?? 0} kn · ${vessel.course?.toFixed(0) ?? 0}°</div>
+              ${vessel.destination ? `<div style="font-size:11px;color:#60a5fa;">→ ${vessel.destination}</div>` : ''}
+            </div>
+          `);
+
+        const marker = new mapboxgl.Marker({ element: el })
+          .setLngLat([vessel.lng, vessel.lat])
+          .setPopup(popup)
+          .addTo(map);
+
+        vesselMarkersRef.current.push(marker);
+        markersRef.current.push(marker);
+      }
 
       // --- Fetch road routes from Mapbox Directions API ---
       fetchRoadRoutesSequentially(map);
@@ -732,6 +792,11 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
     if (map.getLayer('ocean-routes-layer')) {
       map.setLayoutProperty('ocean-routes-layer', 'visibility', layers.ocean ? 'visible' : 'none');
     }
+
+    // Toggle vessels
+    vesselMarkersRef.current.forEach(m => {
+      m.getElement().style.display = layers.vessels ? '' : 'none';
+    });
   }, [layers]);
 
   function clearSelection() {
@@ -878,6 +943,7 @@ export function MapClient({ mines, harbours, listings, routes }: MapClientProps)
           { key: 'corridors', label: 'Rail Corridors', color: '#f87171' },
           { key: 'roads', label: 'Road Routes', color: '#6b7280' },
           { key: 'ocean', label: 'Ocean Routes', color: '#60a5fa' },
+          { key: 'vessels', label: `Vessels (${vessels.length})`, color: '#a78bfa' },
         ].map(({ key, label, color }) => (
           <label key={key} className="flex items-center gap-2 cursor-pointer text-xs">
             <input
