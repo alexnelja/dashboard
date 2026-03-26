@@ -35,6 +35,9 @@ export default async function DashboardPage() {
           <p className="text-gray-400 text-sm mt-1">
             {user.company_name} · {user.country}
           </p>
+          <Link href="/dashboard/kyc" className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
+            Manage KYC documents &rarr;
+          </Link>
         </div>
         <div className="flex gap-3">
           <Link

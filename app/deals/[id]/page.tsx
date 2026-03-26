@@ -13,6 +13,8 @@ import { RatingForm } from './rating-form';
 import { HedgingPanel } from './hedging-panel';
 import { DealProgress } from './deal-progress';
 import { DealTabs } from './deal-tabs';
+import { DealMessages } from './deal-messages';
+import { InviteCounterparty } from './invite-counterparty';
 import { getTrustScoreForUser } from '@/lib/trust-queries';
 import { compareSpecs } from '@/lib/spec-comparison';
 import type { SpecTolerance, PriceAdjustmentRule } from '@/lib/spec-comparison';
@@ -143,6 +145,9 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
               isBuyer={isBuyer}
             />
 
+            {/* Invite counterparty */}
+            <InviteCounterparty dealId={deal.id} counterpartyName={deal.counterparty_name} />
+
             {/* Hedging panel */}
             {(['negotiation', 'second_accept', 'escrow_held'] as string[]).includes(deal.status) && (
               <HedgingPanel
@@ -246,11 +251,7 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
           </div>
         }
         messagesContent={
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
-            <h3 className="text-sm font-semibold text-white mb-2">Deal Messaging</h3>
-            <p className="text-xs text-gray-500 mb-4">In-deal messaging is coming soon. Currently, negotiate via your existing channels.</p>
-            <p className="text-xs text-gray-600">All deal actions and document uploads are logged automatically.</p>
-          </div>
+          <DealMessages dealId={deal.id} currentUserId={user.id} counterpartyName={deal.counterparty_name} />
         }
       />
     </div>
