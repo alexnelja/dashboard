@@ -7,6 +7,8 @@ import type { DealSimulation, TradePoint } from '@/lib/forward-waterfall';
 import { CORRIDOR_POINTS, getValidSellPoints } from '@/lib/forward-waterfall';
 import type { FxHedgeType } from '@/lib/price-waterfall';
 import { COMMON_DESTINATIONS } from '@/lib/distance';
+import type { OptimizationResult, RouteOption } from '@/lib/route-optimizer';
+import { RouteTable } from './route-table';
 
 interface PortOption {
   id: string;
@@ -80,6 +82,11 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
   const [simulation, setSimulation] = useState<DealSimulation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Route optimization state
+  const [optimization, setOptimization] = useState<OptimizationResult | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeError, setOptimizeError] = useState<string | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -173,6 +180,58 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
     debounceRef.current = setTimeout(runSimulation, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [runSimulation]);
+
+  // Route optimization
+  const runOptimization = useCallback(async () => {
+    if (buyPrice <= 0) return;
+
+    setOptimizing(true);
+    setOptimizeError(null);
+
+    const qp = new URLSearchParams({
+      commodity,
+      buy_point: buyPoint,
+      sell_point: sellPoint,
+      buy_price: buyPrice.toString(),
+      volume: volume.toString(),
+      fx_hedge: fxHedge,
+      hedge_commodity: hedgeCommodity.toString(),
+    });
+
+    if (selectedMine) {
+      qp.set('mine_lat', selectedMine.location.lat.toString());
+      qp.set('mine_lng', selectedMine.location.lng.toString());
+      qp.set('mine_name', selectedMine.name);
+    }
+
+    if (currentIndexPrice > 0) {
+      qp.set('index_price', currentIndexPrice.toString());
+    }
+
+    try {
+      const res = await fetch(`/api/optimize-routes?${qp.toString()}`);
+      if (!res.ok) {
+        const body = await res.json();
+        setOptimizeError(body.error || 'Optimization failed');
+        return;
+      }
+      const data = await res.json();
+      setOptimization(data);
+    } catch {
+      setOptimizeError('Failed to run route optimization');
+    } finally {
+      setOptimizing(false);
+    }
+  }, [commodity, buyPoint, sellPoint, buyPrice, volume, selectedMine, fxHedge, hedgeCommodity, currentIndexPrice]);
+
+  // When user selects a route from the optimization table, populate the form
+  const handleSelectRoute = useCallback((route: RouteOption) => {
+    setSelectedPortName(route.loadingPort);
+    if (route.destination !== 'N/A') {
+      setSelectedDestName(route.destination);
+    }
+    setTransportMode(route.transportMode);
+  }, []);
 
   // Reset mine selection when commodity changes
   useEffect(() => {
@@ -443,6 +502,43 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
           )}
         </div>
       </div>
+
+      {/* Optimize Routes button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={runOptimization}
+          disabled={optimizing || buyPrice <= 0}
+          className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 disabled:text-gray-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+        >
+          {optimizing ? (
+            <>
+              <div className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" />
+              Evaluating routes...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+              </svg>
+              Optimize Routes
+            </>
+          )}
+        </button>
+        {currentIndexPrice <= 0 && (
+          <span className="text-xs text-gray-500">Set an index CIF price to see margin rankings</span>
+        )}
+      </div>
+
+      {optimizeError && (
+        <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">
+          {optimizeError}
+        </div>
+      )}
+
+      {/* Route Optimization Results */}
+      {optimization && (
+        <RouteTable result={optimization} onSelectRoute={handleSelectRoute} />
+      )}
 
       {error && (
         <div className="bg-red-900/30 border border-red-800 rounded-lg px-4 py-3 text-sm text-red-300">
