@@ -8,6 +8,7 @@ import { CORRIDOR_POINTS, getValidSellPoints } from '@/lib/forward-waterfall';
 import type { FxHedgeType } from '@/lib/price-waterfall';
 import { COMMON_DESTINATIONS } from '@/lib/distance';
 import type { OptimizationResult, RouteOption } from '@/lib/route-optimizer';
+import { QUALITY_BADGES, DATA_SOURCES, type DataQuality } from '@/lib/data-sources';
 import { RouteTable } from './route-table';
 
 interface PortOption {
@@ -653,6 +654,7 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
                   <th className="px-4 py-2 text-left font-medium">Component</th>
                   <th className="px-4 py-2 text-right font-medium">$/t</th>
                   <th className="px-4 py-2 text-right font-medium">Subtotal</th>
+                  <th className="px-2 py-2 text-center font-medium hidden sm:table-cell">Source</th>
                   <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Note</th>
                 </tr>
               </thead>
@@ -682,6 +684,13 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
                           : 'text-gray-400'
                       }`}>
                         ${step.subtotal.toFixed(2)}
+                      </td>
+                      <td className="px-2 py-2 text-center hidden sm:table-cell">
+                        {step.quality && (
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${QUALITY_BADGES[step.quality as DataQuality].bgColor} ${QUALITY_BADGES[step.quality as DataQuality].color} ${QUALITY_BADGES[step.quality as DataQuality].borderColor}`}>
+                            {QUALITY_BADGES[step.quality as DataQuality].label}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-500 hidden sm:table-cell">{step.note}</td>
                     </tr>
@@ -778,6 +787,9 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
               </div>
             )}
           </div>
+
+          {/* Data Sources & Accuracy */}
+          <DataSourcesPanel steps={simulation.steps} />
         </>
       )}
     </div>
@@ -886,6 +898,72 @@ function SummaryCard({ label, value, color, sub }: { label: string; value: strin
       <p className="text-xs text-gray-500">{label}</p>
       <p className={`text-lg font-bold ${color}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Data Sources Panel ──────────────────────────────────────────────────────
+
+function DataSourcesPanel({ steps }: { steps: DealSimulation['steps'] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Collect unique sources from steps
+  const sourceIds = new Set<string>();
+  for (const step of steps) {
+    if (step.sourceId) sourceIds.add(step.sourceId);
+  }
+
+  const uniqueSources = Array.from(sourceIds)
+    .map(id => DATA_SOURCES[id])
+    .filter(Boolean);
+
+  if (uniqueSources.length === 0) return null;
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-6 py-4 text-left hover:bg-gray-800/50 transition-colors"
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
+            Data Sources & Accuracy
+          </h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {uniqueSources.length} sources used in this simulation
+          </p>
+        </div>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="px-6 pb-5 space-y-2">
+          {uniqueSources.map(source => (
+            <div key={source.id} className="flex items-center gap-3">
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full border flex-shrink-0 ${QUALITY_BADGES[source.quality].bgColor} ${QUALITY_BADGES[source.quality].color} ${QUALITY_BADGES[source.quality].borderColor}`}>
+                {QUALITY_BADGES[source.quality].label}
+              </span>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-white">{source.name}</span>
+                {source.lastUpdated && (
+                  <span className="text-[10px] text-gray-500 ml-2">Updated {source.lastUpdated}</span>
+                )}
+                <span className="text-[10px] text-gray-500 ml-2">{source.note}</span>
+              </div>
+              {source.upgradeAvailable && (
+                <span className="text-[9px] text-amber-400 flex-shrink-0 hidden lg:block">
+                  Upgrade: {source.upgradeAvailable}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

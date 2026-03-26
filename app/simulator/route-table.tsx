@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { OptimizationResult, RouteOption } from '@/lib/route-optimizer';
+import type { DataQuality } from '@/lib/data-sources';
 
 type SortKey = 'rank' | 'margin' | 'transitDays' | 'freightCost' | 'portCosts' | 'inlandCost' | 'sellPrice';
 
@@ -72,6 +73,9 @@ export function RouteTable({ result, onSelectRoute }: RouteTableProps) {
 
       {expanded && (
         <>
+          {/* Data quality confidence banner */}
+          <DataQualityBanner />
+
           {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -206,5 +210,22 @@ function SortHeader({
         <span className="ml-0.5 text-[10px]">{asc ? '\u25B2' : '\u25BC'}</span>
       )}
     </th>
+  );
+}
+
+// ── Data Quality Banner ──────────────────────────────────────────────────────
+
+function DataQualityBanner() {
+  // Route optimization uses a mix of published port tariffs, estimated inland/rail costs,
+  // calculated vessel economics, and placeholder bunker fuel — so some costs are estimates.
+  return (
+    <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/10">
+      <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+      </svg>
+      <span className="text-[10px] text-amber-400">
+        Some costs are estimates — results are indicative. Port tariffs are published; inland, freight, and bunker costs use industry averages.
+      </span>
+    </div>
   );
 }

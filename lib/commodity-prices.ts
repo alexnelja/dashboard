@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from './supabase-server';
 import type { CommodityType } from './types';
+import { getPriceSource, type DataQuality } from './data-sources';
 
 export interface CommodityPrice {
   id: string;
@@ -14,8 +15,12 @@ export interface CommodityPrice {
 export interface CommodityPriceDisplay {
   price: number;
   source: string;
+  sourceId: string;
+  quality: DataQuality;
   period: string;
   trend: { text: string; positive: boolean } | null;
+  lastUpdated: string;
+  upgradeAvailable?: string;
 }
 
 /**
@@ -133,10 +138,16 @@ export async function getCommodityPriceForDisplay(
     }
   }
 
+  const dataSource = getPriceSource(commodity, latest.source);
+
   return {
     price: latest.price_usd,
     source: latest.source,
+    sourceId: dataSource.id,
+    quality: dataSource.quality,
     period: latest.period,
     trend,
+    lastUpdated: latest.recorded_at,
+    upgradeAvailable: dataSource.upgradeAvailable,
   };
 }

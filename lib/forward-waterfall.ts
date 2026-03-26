@@ -4,6 +4,7 @@ import { haversineDistance } from './distance';
 import {
   FX_HEDGE_COSTS, COMMODITY_HEDGE_COSTS, type FxHedgeType,
 } from './price-waterfall';
+import type { DataQuality } from './data-sources';
 
 // ── Trade point types ──────────────────────────────────────────────────────
 
@@ -74,6 +75,8 @@ export interface ForwardWaterfallStep {
   category: 'cost' | 'freight' | 'port' | 'tax' | 'inland' | 'finance' | 'price';
   note?: string;
   editable?: boolean;
+  sourceId?: string;     // References DATA_SOURCES key
+  quality?: DataQuality; // 'published' | 'calculated' | 'estimated' | 'placeholder'
 }
 
 export interface TradeFinancing {
@@ -236,7 +239,7 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
   // ── SEGMENT: mine_gate → stockpile (weighbridge + inland transport) ──
   if (isPositionActive('mine_to_stockpile')) {
     subtotal += WEIGHBRIDGE;
-    steps.push({ label: 'Weighbridge', amount: WEIGHBRIDGE, subtotal, category: 'inland', note: 'Per-truck weighbridge at mine' });
+    steps.push({ label: 'Weighbridge', amount: WEIGHBRIDGE, subtotal, category: 'inland', note: 'Per-truck weighbridge at mine', quality: 'estimated' });
 
     if (mineCoords) {
       const inlandDistKm = haversineDistance(mineCoords.lat, mineCoords.lng, loadingPortCoords.lat, loadingPortCoords.lng) * 1.852 * 1.3;
@@ -250,6 +253,8 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
         category: 'inland',
         note: `${Math.round(inlandDistKm)}km ${transportMode} to ${loadingPort}`,
         editable: true,
+        sourceId: transportMode === 'rail' ? 'transnet_rail' : 'road_freight',
+        quality: 'estimated',
       });
     }
 
@@ -261,7 +266,7 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
   if (isPositionActive('stockpile_to_portgate')) {
     const port = PORT_CHARGES[loadingPort] || PORT_CHARGES.default;
     subtotal += port.crosshaul;
-    steps.push({ label: 'Crosshaul', amount: port.crosshaul, subtotal, category: 'port', note: 'Stockpile to quayside', editable: true });
+    steps.push({ label: 'Crosshaul', amount: port.crosshaul, subtotal, category: 'port', note: 'Stockpile to quayside', editable: true, sourceId: 'port_tariffs', quality: 'published' });
 
     corridorPrices.port_gate = subtotal;
     steps.push({ label: '= FCA Port Gate', amount: 0, subtotal, category: 'price', note: `Delivered to ${loadingPort} gate` });
@@ -282,25 +287,25 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
 
     for (const cost of portCosts) {
       subtotal += cost.amount;
-      steps.push({ label: cost.label, amount: cost.amount, subtotal, category: 'port', note: cost.note, editable: true });
+      steps.push({ label: cost.label, amount: cost.amount, subtotal, category: 'port', note: cost.note, editable: true, sourceId: 'port_tariffs', quality: 'published' });
     }
 
     // Royalty (on FOB value — circular, so approximate on current subtotal)
     const royaltyRate = ROYALTY_RATES[commodity] || 0.03;
     const royaltyCost = subtotal * royaltyRate;
     subtotal += royaltyCost;
-    steps.push({ label: 'Mineral royalty', amount: royaltyCost, subtotal, category: 'tax', note: `MPRRA ~${(royaltyRate * 100).toFixed(1)}% of FOB`, editable: true });
+    steps.push({ label: 'Mineral royalty', amount: royaltyCost, subtotal, category: 'tax', note: `MPRRA ~${(royaltyRate * 100).toFixed(1)}% of FOB`, editable: true, sourceId: 'mprra_royalty', quality: 'estimated' });
 
     // Surveyor
     subtotal += SURVEY_SAMPLING;
-    steps.push({ label: 'Surveyor & sampling', amount: SURVEY_SAMPLING, subtotal, category: 'port', note: 'Independent inspection at port' });
+    steps.push({ label: 'Surveyor & sampling', amount: SURVEY_SAMPLING, subtotal, category: 'port', note: 'Independent inspection at port', quality: 'estimated' });
 
     // Storage
     if (storageDays > 0) {
       const storageWeeks = Math.ceil(storageDays / 7);
       const storageCost = storageWeeks * port.storage_per_week;
       subtotal += storageCost;
-      steps.push({ label: 'Terminal storage', amount: storageCost, subtotal, category: 'port', note: `${storageDays} days at ${loadingPort}`, editable: true });
+      steps.push({ label: 'Terminal storage', amount: storageCost, subtotal, category: 'port', note: `${storageDays} days at ${loadingPort}`, editable: true, sourceId: 'port_tariffs', quality: 'published' });
     }
 
     corridorPrices.fob = subtotal;
@@ -329,11 +334,11 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
 
   if (isPositionActive('fob_to_cfr')) {
     subtotal += freightPerTonne;
-    steps.push({ label: 'Ocean freight', amount: freightPerTonne, subtotal, category: 'freight', note: `${loadingPort} → ${destinationName || 'destination'} (${Math.round(routeDistanceNm).toLocaleString()} nm)`, editable: true });
+    steps.push({ label: 'Ocean freight', amount: freightPerTonne, subtotal, category: 'freight', note: `${loadingPort} → ${destinationName || 'destination'} (${Math.round(routeDistanceNm).toLocaleString()} nm)`, editable: true, sourceId: 'vessel_economics', quality: 'calculated' });
 
     // Discharge fees are part of getting to CFR (cost + freight includes discharge)
     subtotal += DISCHARGE_FEES;
-    steps.push({ label: 'Discharge port fees', amount: DISCHARGE_FEES, subtotal, category: 'freight', note: 'Destination port handling + stevedoring' });
+    steps.push({ label: 'Discharge port fees', amount: DISCHARGE_FEES, subtotal, category: 'freight', note: 'Destination port handling + stevedoring', quality: 'estimated' });
 
     corridorPrices.cfr = subtotal;
     steps.push({ label: '= CFR Price', amount: 0, subtotal, category: 'price', note: `Cost & Freight at ${destinationName || 'destination'}` });
@@ -343,7 +348,7 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
   if (isPositionActive('cfr_to_cif')) {
     const insuranceCost = subtotal * INSURANCE_RATE;
     subtotal += insuranceCost;
-    steps.push({ label: 'Marine insurance', amount: insuranceCost, subtotal, category: 'freight', note: `${(INSURANCE_RATE * 100).toFixed(2)}% of cargo value` });
+    steps.push({ label: 'Marine insurance', amount: insuranceCost, subtotal, category: 'freight', note: `${(INSURANCE_RATE * 100).toFixed(2)}% of cargo value`, quality: 'calculated' });
 
     corridorPrices.cif = subtotal;
     steps.push({ label: '= CIF Price (delivered)', amount: 0, subtotal, category: 'price', note: `Cost, Insurance & Freight at ${destinationName || 'destination'}` });
@@ -355,7 +360,7 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
     const hedgeDuration = Math.min(fxHedgeConfig.months, dealDurationMonths);
     const fxCost = subtotal * (fxHedgeConfig.annualizedPct / 100) * (hedgeDuration / 12);
     subtotal += fxCost;
-    steps.push({ label: `FX hedge (${fxHedgeConfig.label})`, amount: fxCost, subtotal, category: 'finance', note: `${fxHedgeConfig.annualizedPct}% p.a. × ${hedgeDuration}m`, editable: true });
+    steps.push({ label: `FX hedge (${fxHedgeConfig.label})`, amount: fxCost, subtotal, category: 'finance', note: `${fxHedgeConfig.annualizedPct}% p.a. × ${hedgeDuration}m`, editable: true, sourceId: 'fx_hedge_cost', quality: 'estimated' });
   }
 
   if (hedgeCommodityPrice) {
@@ -363,7 +368,7 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
     if (hedge?.available) {
       const hedgeCost = subtotal * (hedge.costPct / 100) * (dealDurationMonths / 12);
       subtotal += hedgeCost;
-      steps.push({ label: `Price hedge (${hedge.instrument})`, amount: hedgeCost, subtotal, category: 'finance', note: `${hedge.exchange} — ${hedge.costPct}% p.a.`, editable: true });
+      steps.push({ label: `Price hedge (${hedge.instrument})`, amount: hedgeCost, subtotal, category: 'finance', note: `${hedge.exchange} — ${hedge.costPct}% p.a.`, editable: true, quality: 'calculated' });
     }
   }
 
@@ -380,15 +385,15 @@ export function simulateDeal(params: SimulationParams): DealSimulation {
 
     if (lcCost > 0) {
       subtotal += lcCost;
-      steps.push({ label: 'Letter of credit', amount: lcCost, subtotal, category: 'finance', note: `${financing.lcCostPct}% of deal value`, editable: true });
+      steps.push({ label: 'Letter of credit', amount: lcCost, subtotal, category: 'finance', note: `${financing.lcCostPct}% of deal value`, editable: true, quality: 'calculated' });
     }
     if (interestCost > 0) {
       subtotal += interestCost;
-      steps.push({ label: 'Working capital interest', amount: interestCost, subtotal, category: 'finance', note: `${interestRate}% p.a. for ${financingDays} days on buy price`, editable: true });
+      steps.push({ label: 'Working capital interest', amount: interestCost, subtotal, category: 'finance', note: `${interestRate}% p.a. for ${financingDays} days on buy price`, editable: true, quality: 'calculated' });
     }
     if (insuranceCreditCost > 0) {
       subtotal += insuranceCreditCost;
-      steps.push({ label: 'Credit insurance', amount: insuranceCreditCost, subtotal, category: 'finance', note: `${financing.creditInsurancePct}% of deal value`, editable: true });
+      steps.push({ label: 'Credit insurance', amount: insuranceCreditCost, subtotal, category: 'finance', note: `${financing.creditInsurancePct}% of deal value`, editable: true, quality: 'calculated' });
     }
 
     financingResult = {
