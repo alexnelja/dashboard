@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { simulateDeal } from '@/lib/forward-waterfall';
+import type { TradePoint } from '@/lib/forward-waterfall';
 import type { CommodityType } from '@/lib/types';
 import type { FxHedgeType } from '@/lib/price-waterfall';
 import type { TradeFinancing } from '@/lib/forward-waterfall';
+
+const VALID_TRADE_POINTS: TradePoint[] = ['mine_gate', 'stockpile', 'port_gate', 'fob', 'cfr', 'cif'];
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
 
   const commodity = params.get('commodity') as CommodityType | null;
-  const mineGatePriceRaw = params.get('mine_gate_price');
   const volumeRaw = params.get('volume');
   const loadingPort = params.get('loading_port');
   const loadingLat = params.get('loading_lat');
@@ -16,18 +18,37 @@ export async function GET(request: NextRequest) {
   const destLat = params.get('dest_lat');
   const destLng = params.get('dest_lng');
 
-  if (!commodity || !mineGatePriceRaw || !loadingPort || !loadingLat || !loadingLng || !destLat || !destLng) {
+  // Buy/sell point parameters (new)
+  const buyPointRaw = params.get('buy_point') as TradePoint | null;
+  const sellPointRaw = params.get('sell_point') as TradePoint | null;
+  const buyPriceRaw = params.get('buy_price');
+
+  // Legacy parameter (backward compatible)
+  const mineGatePriceRaw = params.get('mine_gate_price');
+
+  // Resolve buy price: prefer buy_price, fall back to mine_gate_price
+  const priceRaw = buyPriceRaw || mineGatePriceRaw;
+
+  if (!commodity || !priceRaw || !loadingPort || !loadingLat || !loadingLng || !destLat || !destLng) {
     return NextResponse.json(
-      { error: 'Missing required parameters: commodity, mine_gate_price, loading_port, loading_lat, loading_lng, dest_lat, dest_lng' },
+      { error: 'Missing required parameters: commodity, buy_price (or mine_gate_price), loading_port, loading_lat, loading_lng, dest_lat, dest_lng' },
       { status: 400 },
     );
   }
 
-  const mineGatePrice = parseFloat(mineGatePriceRaw);
+  const buyPrice = parseFloat(priceRaw);
   const volumeTonnes = parseFloat(volumeRaw ?? '15000');
 
-  if (isNaN(mineGatePrice) || mineGatePrice <= 0) {
-    return NextResponse.json({ error: 'mine_gate_price must be a positive number' }, { status: 400 });
+  if (isNaN(buyPrice) || buyPrice <= 0) {
+    return NextResponse.json({ error: 'buy_price must be a positive number' }, { status: 400 });
+  }
+
+  // Validate trade points
+  const buyPoint: TradePoint = (buyPointRaw && VALID_TRADE_POINTS.includes(buyPointRaw)) ? buyPointRaw : 'mine_gate';
+  const sellPoint: TradePoint = (sellPointRaw && VALID_TRADE_POINTS.includes(sellPointRaw)) ? sellPointRaw : 'cif';
+
+  if (VALID_TRADE_POINTS.indexOf(sellPoint) <= VALID_TRADE_POINTS.indexOf(buyPoint)) {
+    return NextResponse.json({ error: 'sell_point must come after buy_point in the corridor' }, { status: 400 });
   }
 
   const destinationName = params.get('destination_name') || undefined;
@@ -48,7 +69,6 @@ export async function GET(request: NextRequest) {
     indexCifPrice = parseFloat(indexCifPriceRaw);
   } else {
     try {
-      // Dynamic import to avoid issues in edge runtime
       const { createAdminSupabaseClient } = await import('@/lib/supabase-server');
       const supabase = createAdminSupabaseClient();
       const { data } = await supabase
@@ -83,7 +103,9 @@ export async function GET(request: NextRequest) {
   }
 
   const simulation = simulateDeal({
-    mineGatePrice,
+    buyPoint,
+    sellPoint,
+    buyPrice,
     commodity,
     volumeTonnes,
     loadingPort,

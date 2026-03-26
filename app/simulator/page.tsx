@@ -4,7 +4,7 @@ import { SimulatorClient } from './simulator-client';
 
 export const metadata = {
   title: 'Deal Simulator | MineMarket',
-  description: 'Forward waterfall calculator — mine gate to CIF cost and margin',
+  description: 'Forward waterfall calculator — flexible buy/sell points along the supply chain corridor',
 };
 
 export default async function SimulatorPage() {

@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MineWithGeo, GeoPoint, CommodityType } from '@/lib/types';
 import { COMMODITY_CONFIG } from '@/lib/types';
-import type { DealSimulation } from '@/lib/forward-waterfall';
+import type { DealSimulation, TradePoint } from '@/lib/forward-waterfall';
+import { CORRIDOR_POINTS, getValidSellPoints } from '@/lib/forward-waterfall';
 import type { FxHedgeType } from '@/lib/price-waterfall';
 import { COMMON_DESTINATIONS } from '@/lib/distance';
 
@@ -36,6 +37,9 @@ const COMMODITIES = Object.entries(COMMODITY_CONFIG).map(([key, config]) => ({
   label: config.label,
 }));
 
+// Buy points: all points except cif (can't sell from cif, no corridor after)
+const BUY_POINT_OPTIONS = CORRIDOR_POINTS.filter(p => p.key !== 'cif');
+
 // Fallback destinations when no destination ports in DB
 const FALLBACK_DESTINATIONS: PortOption[] = COMMON_DESTINATIONS.map((d, i) => ({
   id: `dest-${i}`,
@@ -56,7 +60,9 @@ const FALLBACK_LOADING_PORTS: PortOption[] = [
 export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPrices }: SimulatorClientProps) {
   // Form state
   const [commodity, setCommodity] = useState<CommodityType>('chrome');
-  const [mineGatePrice, setMineGatePrice] = useState(151);
+  const [buyPoint, setBuyPoint] = useState<TradePoint>('mine_gate');
+  const [sellPoint, setSellPoint] = useState<TradePoint>('cif');
+  const [buyPrice, setBuyPrice] = useState(151);
   const [volume, setVolume] = useState(15000);
   const [selectedMineId, setSelectedMineId] = useState('');
   const [selectedPortName, setSelectedPortName] = useState('Richards Bay');
@@ -91,15 +97,32 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
 
   const currentIndexPrice = indexPriceOverride ? parseFloat(indexPriceOverride) : (indexPrices[commodity] || 0);
 
+  // Valid sell points based on current buy point
+  const validSellPoints = getValidSellPoints(buyPoint);
+  const sellPointOptions = CORRIDOR_POINTS.filter(p => validSellPoints.includes(p.key));
+
+  // Ensure sellPoint is still valid when buyPoint changes
+  useEffect(() => {
+    if (!validSellPoints.includes(sellPoint)) {
+      setSellPoint(validSellPoints[validSellPoints.length - 1] || 'cif');
+    }
+  }, [buyPoint, sellPoint, validSellPoints]);
+
+  // Determine if inland transport fields are needed
+  const needsInland = buyPoint === 'mine_gate';
+  const needsOcean = sellPoint === 'cfr' || sellPoint === 'cif';
+
   const runSimulation = useCallback(async () => {
-    if (!selectedPort || !selectedDest || mineGatePrice <= 0) return;
+    if (!selectedPort || !selectedDest || buyPrice <= 0) return;
 
     setLoading(true);
     setError(null);
 
     const qp = new URLSearchParams({
       commodity,
-      mine_gate_price: mineGatePrice.toString(),
+      buy_point: buyPoint,
+      sell_point: sellPoint,
+      buy_price: buyPrice.toString(),
       volume: volume.toString(),
       loading_port: selectedPort.name,
       loading_lat: selectedPort.location.lat.toString(),
@@ -142,7 +165,7 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
     } finally {
       setLoading(false);
     }
-  }, [commodity, mineGatePrice, volume, selectedPort, selectedDest, selectedMine, transportMode, fxHedge, hedgeCommodity, financingEnabled, lcCostPct, interestRatePct, creditInsurancePct, currentIndexPrice]);
+  }, [commodity, buyPoint, sellPoint, buyPrice, volume, selectedPort, selectedDest, selectedMine, transportMode, fxHedge, hedgeCommodity, financingEnabled, lcCostPct, interestRatePct, creditInsurancePct, currentIndexPrice]);
 
   // Debounced auto-run
   useEffect(() => {
@@ -175,36 +198,51 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
     finance: 'Financing & hedging',
   };
 
+  // Labels for buy point in the price input
+  const buyPointLabel = CORRIDOR_POINTS.find(p => p.key === buyPoint)?.label || buyPoint;
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Deal Simulator</h1>
-        <p className="text-sm text-gray-400 mt-1">Forward waterfall: mine gate price to CIF cost and margin</p>
+        <p className="text-sm text-gray-400 mt-1">Forward waterfall: flexible buy/sell points along the supply chain corridor</p>
       </div>
 
       {/* Input Form */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
-        {/* Row 1: Commodity + Price + Volume */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Row 1: Buy Point + Sell Point + Price + Volume */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Commodity</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Buy at</label>
             <select
-              value={commodity}
-              onChange={e => setCommodity(e.target.value as CommodityType)}
+              value={buyPoint}
+              onChange={e => setBuyPoint(e.target.value as TradePoint)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
             >
-              {COMMODITIES.map(c => (
-                <option key={c.value} value={c.value}>{c.label}</option>
+              {BUY_POINT_OPTIONS.map(p => (
+                <option key={p.key} value={p.key}>{p.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Mine gate price ($/t)</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Sell at</label>
+            <select
+              value={sellPoint}
+              onChange={e => setSellPoint(e.target.value as TradePoint)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+            >
+              {sellPointOptions.map(p => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Buy price ($/t)</label>
             <input
               type="number"
-              value={mineGatePrice}
-              onChange={e => setMineGatePrice(parseFloat(e.target.value) || 0)}
+              value={buyPrice}
+              onChange={e => setBuyPrice(parseFloat(e.target.value) || 0)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
               min={0}
               step={1}
@@ -223,21 +261,48 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
           </div>
         </div>
 
-        {/* Row 2: Mine + Port + Destination + Transport */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        {/* Row 2: Commodity + Mine + Port + Destination + Transport */}
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Mine</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Commodity</label>
             <select
-              value={selectedMineId}
-              onChange={e => setSelectedMineId(e.target.value)}
+              value={commodity}
+              onChange={e => setCommodity(e.target.value as CommodityType)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
             >
-              <option value="">None (no inland)</option>
-              {filteredMines.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              {COMMODITIES.map(c => (
+                <option key={c.value} value={c.value}>{c.label}</option>
               ))}
             </select>
           </div>
+          {needsInland && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Mine</label>
+                <select
+                  value={selectedMineId}
+                  onChange={e => setSelectedMineId(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+                >
+                  <option value="">None (no inland)</option>
+                  {filteredMines.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Transport</label>
+                <select
+                  value={transportMode}
+                  onChange={e => setTransportMode(e.target.value as 'rail' | 'road')}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+                >
+                  <option value="rail">Rail</option>
+                  <option value="road">Road</option>
+                </select>
+              </div>
+            </>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1.5">Loading port</label>
             <select
@@ -250,29 +315,20 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Destination</label>
-            <select
-              value={selectedDestName}
-              onChange={e => setSelectedDestName(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
-            >
-              {effectiveDestinations.map(d => (
-                <option key={d.id} value={d.name}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Transport</label>
-            <select
-              value={transportMode}
-              onChange={e => setTransportMode(e.target.value as 'rail' | 'road')}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
-            >
-              <option value="rail">Rail</option>
-              <option value="road">Road</option>
-            </select>
-          </div>
+          {needsOcean && (
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1.5">Destination</label>
+              <select
+                value={selectedDestName}
+                onChange={e => setSelectedDestName(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-white/20"
+              >
+                {effectiveDestinations.map(d => (
+                  <option key={d.id} value={d.name}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Row 3: Hedging + Financing */}
@@ -397,18 +453,42 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
       {/* Results */}
       {simulation && (
         <>
+          {/* Corridor visualization */}
+          <CorridorBar simulation={simulation} />
+
           {/* Summary cards */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <SummaryCard label="Mine Gate" value={`$${simulation.mineGatePrice.toFixed(2)}`} color="text-white" />
-            <SummaryCard label="FCA Port" value={`$${simulation.fcaPortPrice.toFixed(2)}`} color="text-gray-300" />
-            <SummaryCard label="FOB" value={`$${simulation.fobPrice.toFixed(2)}`} color="text-amber-400" />
-            <SummaryCard label="CIF" value={`$${simulation.cifPrice.toFixed(2)}`} color="text-blue-400" />
+            <SummaryCard
+              label={`Buy (${simulation.buyPoint.replace('_', ' ')})`}
+              value={`$${simulation.buyPrice.toFixed(2)}`}
+              color="text-white"
+            />
+            <SummaryCard
+              label="Your cost at sell"
+              value={`$${simulation.sellPrice.toFixed(2)}`}
+              color="text-amber-400"
+            />
+            {simulation.indexSellPrice !== null && (
+              <SummaryCard
+                label={`Index ${simulation.sellPoint.toUpperCase()}`}
+                value={`$${simulation.indexSellPrice.toFixed(2)}`}
+                color="text-blue-400"
+              />
+            )}
             <SummaryCard
               label="Margin"
               value={simulation.margin !== null ? `$${simulation.margin.toFixed(2)}` : '---'}
               color={simulation.margin !== null ? (simulation.margin >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-gray-500'}
               sub={simulation.marginPct !== null ? `${simulation.marginPct.toFixed(1)}%` : undefined}
             />
+            {simulation.totalProfit !== null && (
+              <SummaryCard
+                label="Total profit"
+                value={`$${simulation.totalProfit.toLocaleString()}`}
+                color={simulation.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}
+                sub={`${volume.toLocaleString()}t`}
+              />
+            )}
           </div>
 
           {/* Waterfall chart */}
@@ -417,7 +497,7 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
             <div className="space-y-1">
               {simulation.steps.map((step, i) => {
                 const isMarker = step.amount === 0 && step.label.startsWith('=');
-                const maxVal = simulation.totalDeliveredCost || simulation.cifPrice;
+                const maxVal = simulation.sellPrice || simulation.totalDeliveredCost;
                 const barWidth = Math.min((step.subtotal / maxVal) * 100, 100);
 
                 return (
@@ -518,17 +598,17 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
           {/* Margin + Timeline + Breakeven */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Margin comparison */}
-            {simulation.margin !== null && (
+            {simulation.margin !== null && simulation.indexSellPrice !== null && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Market Comparison</p>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Index CIF</span>
-                    <span className="text-white font-medium">${simulation.indexCifPrice?.toFixed(2)}/t</span>
+                    <span className="text-gray-400">Index {simulation.sellPoint.toUpperCase()}</span>
+                    <span className="text-white font-medium">${simulation.indexSellPrice.toFixed(2)}/t</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Your CIF</span>
-                    <span className="text-white font-medium">${simulation.totalDeliveredCost.toFixed(2)}/t</span>
+                    <span className="text-gray-400">Your cost at {simulation.sellPoint.toUpperCase()}</span>
+                    <span className="text-white font-medium">${simulation.sellPrice.toFixed(2)}/t</span>
                   </div>
                   <div className="border-t border-gray-800 pt-2 flex justify-between text-sm">
                     <span className="text-gray-400">Margin</span>
@@ -544,10 +624,10 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
                       </span>
                     </div>
                   )}
-                  {simulation.breakevenMineGate !== null && (
+                  {simulation.breakevenBuyPrice !== null && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Breakeven mine gate</span>
-                      <span className="text-yellow-400 font-medium">${simulation.breakevenMineGate.toFixed(2)}/t</span>
+                      <span className="text-gray-400">Breakeven buy price</span>
+                      <span className="text-yellow-400 font-medium">${simulation.breakevenBuyPrice.toFixed(2)}/t</span>
                     </div>
                   )}
                 </div>
@@ -561,15 +641,9 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
                 <span className="text-3xl font-bold text-white">{simulation.estimatedDaysToDelivery}</span>
                 <span className="text-sm text-gray-400 ml-1">days</span>
               </div>
-              <TimelineBar
-                segments={[
-                  { label: 'Inland', days: transportMode === 'rail' ? 3 : 2, color: 'bg-amber-500' },
-                  { label: 'Port', days: 5, color: 'bg-purple-500' },
-                  { label: 'Ocean', days: simulation.estimatedDaysToDelivery - (transportMode === 'rail' ? 3 : 2) - 5 - 5, color: 'bg-blue-500' },
-                  { label: 'Discharge', days: 5, color: 'bg-cyan-500' },
-                ]}
-                totalDays={simulation.estimatedDaysToDelivery}
-              />
+              <p className="text-xs text-gray-500 text-center">
+                {buyPointLabel} to {CORRIDOR_POINTS.find(p => p.key === sellPoint)?.label || sellPoint}
+              </p>
             </div>
 
             {/* Financing summary */}
@@ -614,37 +688,108 @@ export function SimulatorClient({ mines, loadingPorts, destinationPorts, indexPr
   );
 }
 
+// ── Corridor Bar Component ─────────────────────────────────────────────────
+
+function CorridorBar({ simulation }: { simulation: DealSimulation }) {
+  const corridor = simulation.corridor;
+  if (!corridor || corridor.length === 0) return null;
+
+  const activePoints = corridor.filter(p => p.isActive);
+  const buyIdx = corridor.findIndex(p => p.point === simulation.buyPoint);
+  const sellIdx = corridor.findIndex(p => p.point === simulation.sellPoint);
+  const totalCosts = simulation.sellPrice - simulation.buyPrice;
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-4">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Supply Chain Corridor</p>
+
+      {/* Corridor track */}
+      <div className="relative px-4">
+        {/* Background line */}
+        <div className="flex items-center justify-between relative">
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 bg-gray-700" />
+
+          {/* Active segment highlight */}
+          {buyIdx >= 0 && sellIdx >= 0 && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2 h-1 bg-amber-500/60 rounded-full"
+              style={{
+                left: `${(buyIdx / (corridor.length - 1)) * 100}%`,
+                width: `${((sellIdx - buyIdx) / (corridor.length - 1)) * 100}%`,
+              }}
+            />
+          )}
+
+          {/* Points */}
+          {corridor.map((cp, i) => {
+            const isBuy = cp.point === simulation.buyPoint;
+            const isSell = cp.point === simulation.sellPoint;
+            const isInactive = !cp.isActive;
+
+            return (
+              <div key={cp.point} className="relative z-10 flex flex-col items-center" style={{ width: 0 }}>
+                {/* Dot */}
+                <div className={`w-3 h-3 rounded-full border-2 ${
+                  isBuy ? 'bg-emerald-400 border-emerald-400' :
+                  isSell ? 'bg-amber-400 border-amber-400' :
+                  isInactive ? 'bg-gray-700 border-gray-600' :
+                  'bg-gray-500 border-gray-400'
+                }`} />
+
+                {/* Label below */}
+                <span className={`text-[10px] mt-2 whitespace-nowrap ${
+                  isBuy || isSell ? 'text-white font-semibold' : isInactive ? 'text-gray-600' : 'text-gray-400'
+                }`}>
+                  {cp.point.replace('_', ' ').toUpperCase()}
+                </span>
+
+                {/* Tag */}
+                {isBuy && (
+                  <span className="text-[9px] font-bold text-emerald-400 mt-0.5">BUY</span>
+                )}
+                {isSell && (
+                  <span className="text-[9px] font-bold text-amber-400 mt-0.5">SELL</span>
+                )}
+
+                {/* Price */}
+                {(isBuy || isSell) && (
+                  <span className={`text-xs font-medium mt-0.5 ${isBuy ? 'text-emerald-300' : 'text-amber-300'}`}>
+                    ${isBuy ? simulation.buyPrice.toFixed(2) : simulation.sellPrice.toFixed(2)}/t
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Cost summary below corridor */}
+      <div className="flex justify-center gap-8 text-xs pt-2">
+        <div className="text-center">
+          <span className="text-gray-500">Your costs</span>
+          <span className="text-white font-semibold ml-2">${totalCosts.toFixed(2)}/t</span>
+        </div>
+        {simulation.margin !== null && (
+          <div className="text-center">
+            <span className="text-gray-500">Margin</span>
+            <span className={`font-semibold ml-2 ${simulation.margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              ${simulation.margin.toFixed(2)}/t
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Helper Components ──────────────────────────────────────────────────────
+
 function SummaryCard({ label, value, color, sub }: { label: string; value: string; color: string; sub?: string }) {
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
       <p className="text-xs text-gray-500">{label}</p>
       <p className={`text-lg font-bold ${color}`}>{value}</p>
       {sub && <p className="text-xs text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
-function TimelineBar({ segments, totalDays }: { segments: { label: string; days: number; color: string }[]; totalDays: number }) {
-  return (
-    <div className="space-y-2">
-      <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
-        {segments.map((seg, i) => {
-          const pct = Math.max((seg.days / totalDays) * 100, 2);
-          return (
-            <div
-              key={i}
-              className={`${seg.color} transition-all`}
-              style={{ width: `${pct}%` }}
-              title={`${seg.label}: ${seg.days} days`}
-            />
-          );
-        })}
-      </div>
-      <div className="flex justify-between text-xs text-gray-500">
-        {segments.map((seg, i) => (
-          <span key={i}>{seg.label} ({seg.days}d)</span>
-        ))}
-      </div>
     </div>
   );
 }
