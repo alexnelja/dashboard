@@ -175,6 +175,52 @@ export async function GET(request: NextRequest) {
       results.prices = { note: 'World Bank data available — run npm run ingest:prices locally for full update' };
     }
 
+    // --- LBMA precious metals prices (free, daily, no key needed) ---
+    const lbmaFeeds = [
+      { url: 'https://prices.lbma.org.uk/json/gold_pm.json', commodity: 'gold', unit: 'per_troy_oz' },
+      { url: 'https://prices.lbma.org.uk/json/silver.json', commodity: 'silver', unit: 'per_troy_oz' },
+      { url: 'https://prices.lbma.org.uk/json/platinum_pm.json', commodity: 'platinum', unit: 'per_troy_oz' },
+      { url: 'https://prices.lbma.org.uk/json/palladium_pm.json', commodity: 'palladium', unit: 'per_troy_oz' },
+    ];
+
+    let lbmaPricesIngested = 0;
+
+    for (const feed of lbmaFeeds) {
+      try {
+        const res = await fetch(feed.url);
+        if (res.ok) {
+          const data: { d: string; v: number[] }[] = await res.json();
+          // Get last 30 days of prices
+          const recent = data.slice(-30);
+
+          // Delete old LBMA entries for this commodity
+          await admin.from('commodity_prices')
+            .delete()
+            .eq('commodity', feed.commodity)
+            .eq('source', 'lbma');
+
+          // Insert recent prices
+          const rows = recent
+            .filter((entry) => entry?.d && entry?.v?.[0])
+            .map((entry) => ({
+              commodity: feed.commodity,
+              price_usd: entry.v[0],
+              unit: feed.unit,
+              source: 'lbma',
+              period: entry.d,
+              recorded_at: new Date().toISOString(),
+            }));
+
+          if (rows.length > 0) {
+            for (let i = 0; i < rows.length; i += 100) {
+              await admin.from('commodity_prices').insert(rows.slice(i, i + 100));
+            }
+            lbmaPricesIngested += rows.length;
+          }
+        }
+      } catch { /* skip individual LBMA feed on error */ }
+    }
+
     // Update platform-derived prices from recent deals
     const commodities = ['chrome', 'manganese', 'iron_ore', 'coal', 'platinum', 'gold', 'copper', 'vanadium', 'titanium', 'aggregates'];
     let pricesUpdated = 0;
@@ -202,7 +248,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.prices = { ...(results.prices as Record<string, unknown> || {}), platform_prices_updated: pricesUpdated };
+    results.prices = { ...(results.prices as Record<string, unknown> || {}), lbma_prices_ingested: lbmaPricesIngested, platform_prices_updated: pricesUpdated };
   } catch (err) {
     results.prices = { error: String(err) };
   }

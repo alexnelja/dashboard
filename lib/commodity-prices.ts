@@ -36,10 +36,21 @@ export async function getLatestPrices(): Promise<Record<string, CommodityPrice>>
 
   if (!data) return result;
 
-  // Pick first (most recent) for each commodity
+  const preciousMetals = ['gold', 'silver', 'platinum', 'palladium'];
+
+  // Pick first (most recent) for each commodity, preferring LBMA for precious metals
   for (const row of data) {
     const commodity = row.commodity as string;
-    if (commodities.includes(commodity as CommodityType) && !result[commodity]) {
+    if (!commodities.includes(commodity as CommodityType)) continue;
+
+    if (!result[commodity]) {
+      result[commodity] = row as CommodityPrice;
+    } else if (
+      preciousMetals.includes(commodity) &&
+      result[commodity].source !== 'lbma' &&
+      (row as CommodityPrice).source === 'lbma'
+    ) {
+      // Prefer LBMA for precious metals even if another source was seen first
       result[commodity] = row as CommodityPrice;
     }
   }
@@ -77,20 +88,42 @@ export async function getCommodityPriceForDisplay(
 ): Promise<CommodityPriceDisplay | null> {
   const supabase = await createServerSupabaseClient();
 
-  const { data } = await supabase
-    .from('commodity_prices')
-    .select('*')
-    .eq('commodity', commodity)
-    .order('recorded_at', { ascending: false })
-    .limit(2);
+  // Try LBMA source first (authoritative for precious metals), then fall back to any source
+  const preciousMetals = ['gold', 'silver', 'platinum', 'palladium'];
+  const preferLbma = preciousMetals.includes(commodity);
+
+  let data: CommodityPrice[] | null = null;
+
+  if (preferLbma) {
+    const { data: lbmaData } = await supabase
+      .from('commodity_prices')
+      .select('*')
+      .eq('commodity', commodity)
+      .eq('source', 'lbma')
+      .order('period', { ascending: false })
+      .limit(2);
+    if (lbmaData && lbmaData.length > 0) {
+      data = lbmaData as CommodityPrice[];
+    }
+  }
+
+  if (!data) {
+    const { data: allData } = await supabase
+      .from('commodity_prices')
+      .select('*')
+      .eq('commodity', commodity)
+      .order('recorded_at', { ascending: false })
+      .limit(2);
+    data = (allData as CommodityPrice[] | null);
+  }
 
   if (!data || data.length === 0) return null;
 
-  const latest = data[0] as CommodityPrice;
+  const latest = data[0];
   let trend: CommodityPriceDisplay['trend'] = null;
 
   if (data.length >= 2) {
-    const previous = data[1] as CommodityPrice;
+    const previous = data[1];
     if (previous.price_usd > 0) {
       const pct = ((latest.price_usd - previous.price_usd) / previous.price_usd) * 100;
       trend = {
