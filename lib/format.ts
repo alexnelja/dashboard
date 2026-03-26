@@ -9,7 +9,9 @@ export function timeAgo(timestamp: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  if (days <= 7) return `${days}d ago`;
+  // For older items, show the date
+  return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export function formatCurrency(amount: number, currency: string): string {

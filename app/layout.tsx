@@ -3,8 +3,8 @@ import "./globals.css";
 import { Sidebar } from "./sidebar";
 
 export const metadata: Metadata = {
-  title: "MineMarket",
-  description: "Bulk minerals aggregator marketplace",
+  title: "MineMarket — Deal Workspace for Commodity Traders",
+  description: "Calculate margins, manage deals, track documents. Chrome, manganese, iron ore, and more. Free deal simulator.",
 };
 
 export default function RootLayout({

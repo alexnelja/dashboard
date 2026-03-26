@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { COMMODITY_CONFIG } from '@/lib/types';
 import { timeAgo } from '@/lib/format';
 import { CommodityDot } from '@/app/components/commodity-dot';
-import type { Listing } from '@/lib/types';
+import type { ListingWithDetails } from '@/lib/types';
 
 interface ListingCardProps {
-  listing: Listing;
+  listing: ListingWithDetails;
 }
 
 export function ListingCard({ listing }: ListingCardProps) {
@@ -26,6 +26,7 @@ export function ListingCard({ listing }: ListingCardProps) {
             </span>
           )}
         </div>
+        <p className="text-xs text-gray-500">{listing.seller_company || 'Unknown seller'}</p>
 
         {/* Price */}
         <div className="text-amber-400 text-xl font-bold">

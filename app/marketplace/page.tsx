@@ -37,7 +37,13 @@ export default async function MarketplacePage({ searchParams }: MarketplacePageP
     getActiveRequirements(),
   ]);
 
-  const listings = sortListings(allListings, sortParam);
+  // Filter out obviously broken listings (test/dmtu prices for non-aggregates)
+  const validListings = allListings.filter(l => {
+    if (l.commodity_type === 'aggregates') return true;
+    return l.price_per_tonne >= 5;
+  });
+
+  const listings = sortListings(validListings, sortParam);
 
   return (
     <div className="space-y-6">

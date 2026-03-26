@@ -246,7 +246,14 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
               commodity={deal.commodity_type}
               documents={documents}
             />
-            <VerificationPanel dealId={deal.id} platformVerification={platformVerification} />
+            <details className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <summary className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-800/30">
+                Verification & Inspection
+              </summary>
+              <div className="px-6 pb-6">
+                <VerificationPanel dealId={deal.id} platformVerification={platformVerification} />
+              </div>
+            </details>
             <DocumentUpload
               dealId={deal.id}
               documents={documents}

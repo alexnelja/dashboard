@@ -143,6 +143,11 @@ export default function SignupPage() {
         Already have an account?{' '}
         <Link href="/login" className="text-white hover:underline">Sign in</Link>
       </p>
+      <p className="text-center text-sm text-gray-600 mt-3">
+        <Link href="/simulator" className="text-amber-400 hover:text-amber-300">
+          Try the Deal Simulator first — no account needed →
+        </Link>
+      </p>
     </div>
   );
 }

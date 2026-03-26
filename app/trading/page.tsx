@@ -59,15 +59,17 @@ export default async function TradingPage({ searchParams }: TradingPageProps) {
           transportMode: 'rail',
         });
         return (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Price Breakdown
-            </h2>
-            <p className="text-xs text-gray-500 mb-4">
-              CIF to mine gate waterfall for {config.label} at current index (Richards Bay → Qingdao, 50kt Supramax)
-            </p>
-            <PriceWaterfallChart waterfall={waterfall} />
-          </div>
+          <details className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <summary className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-800/30">
+              Price Breakdown (CIF → Mine Gate)
+            </summary>
+            <div className="p-4">
+              <p className="text-xs text-gray-500 mb-4">
+                CIF to mine gate waterfall for {config.label} at current index (Richards Bay → Qingdao, 50kt Supramax)
+              </p>
+              <PriceWaterfallChart waterfall={waterfall} />
+            </div>
+          </details>
         );
       })()}
 
