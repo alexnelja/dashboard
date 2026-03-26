@@ -2,8 +2,8 @@ import { LabUploadClient } from './lab-upload-client';
 
 export default function LabPage() {
   return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="fixed inset-0 z-50 bg-gray-950 flex items-center justify-center px-4 overflow-y-auto">
+      <div className="w-full max-w-md py-12">
         <div className="text-center mb-8">
           <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center mx-auto mb-4">
             <span className="text-black text-lg font-bold">M</span>

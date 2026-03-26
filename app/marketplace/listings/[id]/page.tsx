@@ -121,7 +121,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                 {confidenceBadge[priceConfidence].label}
               </span>
             )}
-            <div className="text-gray-500 text-xs mt-1">{timeAgo(listing.created_at)} · {listing.view_count || 0} views</div>
+            <div className="text-gray-500 text-xs mt-1">{timeAgo(listing.created_at)}{(listing.view_count ?? 0) > 0 && <span> · {listing.view_count} views</span>}</div>
           </div>
         </div>
       </div>
@@ -294,7 +294,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   <div className="grid grid-cols-3 gap-x-6 gap-y-2">
                     {Object.entries(v.assay_results).map(([key, value]) => (
                       <div key={key}>
-                        <p className="text-xs text-gray-500">{key}</p>
+                        <p className="text-xs text-gray-500">{SPEC_LABELS[key] ?? key}</p>
                         <p className="text-sm text-white">{String(value)}</p>
                       </div>
                     ))}

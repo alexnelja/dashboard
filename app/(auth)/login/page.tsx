@@ -70,7 +70,7 @@ export default function LoginPage() {
               <span className="text-black text-lg font-bold">M</span>
             </div>
             <h1 className="text-xl font-bold">Sign in to MineMarket</h1>
-            <p className="text-gray-400 text-sm mt-1">Bulk minerals marketplace</p>
+            <p className="text-gray-400 text-sm mt-1">The deal workspace for commodity traders</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">

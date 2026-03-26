@@ -382,7 +382,7 @@ export function SimulatorClient({ indexPrices }: SimulatorClientProps) {
               <p className="text-emerald-400 font-semibold text-sm">${simulation.buyPrice.toFixed(2)}/t</p>
             </div>
             <div className="flex-1 text-center">
-              <p className="text-gray-400 text-xs">
+              <p className="text-gray-400 text-xs hidden sm:block">
                 Corridor costs: <span className="text-white font-medium">${(simulation.sellPrice - simulation.buyPrice).toFixed(2)}/t</span>
               </p>
               {simulation.margin !== null && (
@@ -539,6 +539,13 @@ export function SimulatorClient({ indexPrices }: SimulatorClientProps) {
       {/* ════════════════════════════════════════════════════════
           RESULTS
          ════════════════════════════════════════════════════════ */}
+      {loading && (
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center">
+          <div className="inline-block w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-sm text-gray-400">Calculating your margin...</p>
+        </div>
+      )}
+
       {simulation && (
         <>
           {/* ── Big Answer: Your Margin ─────────────────────────── */}
