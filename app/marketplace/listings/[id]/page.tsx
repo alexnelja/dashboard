@@ -13,6 +13,7 @@ import { COMMON_DESTINATIONS } from '@/lib/distance';
 import { calculateSeaRoute } from '@/lib/sea-routes';
 import { calculatePriceWaterfall } from '@/lib/price-waterfall';
 import { PriceWaterfallChart } from '@/app/components/price-waterfall-chart';
+import { createAdminSupabaseClient } from '@/lib/supabase-server';
 
 interface ListingDetailPageProps {
   params: Promise<{ id: string }>;
@@ -30,6 +31,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
     getSellerTrustScore(listing.seller_id),
     getListingVerifications(listing.id),
   ]);
+
+  // Increment view count (fire and forget)
+  const admin = createAdminSupabaseClient();
+  admin.from('listings')
+    .update({ view_count: (listing.view_count || 0) + 1 })
+    .eq('id', id)
+    .then(() => {});
 
   const config = COMMODITY_CONFIG[listing.commodity_type];
 
@@ -113,7 +121,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                 {confidenceBadge[priceConfidence].label}
               </span>
             )}
-            <div className="text-gray-500 text-xs mt-1">{timeAgo(listing.created_at)}</div>
+            <div className="text-gray-500 text-xs mt-1">{timeAgo(listing.created_at)} · {listing.view_count || 0} views</div>
           </div>
         </div>
       </div>

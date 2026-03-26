@@ -52,7 +52,7 @@ export function ListingCard({ listing }: ListingCardProps) {
 
         {/* Footer */}
         <div className="mt-auto text-xs text-gray-500">
-          {timeAgo(listing.created_at)}
+          {timeAgo(listing.created_at)}{listing.view_count ? ` · ${listing.view_count} views` : ''}
         </div>
       </div>
     </Link>

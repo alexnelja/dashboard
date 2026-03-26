@@ -74,6 +74,7 @@ export interface Listing {
   status: ListingStatus;
   price_confidence: string | null;
   price_breakdown: Record<string, unknown>[] | null;
+  view_count?: number;
   created_at: string;
 }
 

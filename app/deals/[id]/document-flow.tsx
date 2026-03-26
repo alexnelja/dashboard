@@ -111,12 +111,12 @@ export function DocumentFlow({ dealStatus, documents, commodity }: DocumentFlowP
                   {stage.docs.map(docType => {
                     const uploaded = uploadedTypes.has(docType);
                     return (
-                      <div key={docType} className={`text-[10px] px-2 py-1 rounded-md text-center ${
+                      <div key={docType} className={`text-xs px-2.5 py-1.5 rounded-md text-center font-medium ${
                         uploaded
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                           : isCurrent
-                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                            : 'bg-gray-800 text-gray-500 border border-gray-700'
+                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                            : 'bg-gray-800/80 text-gray-500 border border-gray-700'
                       }`}>
                         {uploaded ? '\u2713 ' : ''}{DOC_LABELS[docType] ?? docType}
                       </div>
