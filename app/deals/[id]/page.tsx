@@ -18,6 +18,7 @@ import { DealMessages } from './deal-messages';
 import { InviteCounterparty } from './invite-counterparty';
 import { DocumentFlow } from './document-flow';
 import { PnlTracker } from './pnl-tracker';
+import { DealSigning } from './deal-signing';
 import { VerificationPanel } from './verification-panel';
 import { verifyDealDocuments } from '@/lib/platform-verification';
 import { getTrustScoreForUser } from '@/lib/trust-queries';
@@ -165,6 +166,21 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
               fxRateLocked={deal.fx_rate_locked}
               escrowAmount={deal.escrow_amount}
             />
+
+            {/* Deal Signatures */}
+            {['negotiation', 'second_accept', 'escrow_held', 'loading', 'in_transit', 'delivered', 'escrow_released', 'completed'].includes(deal.status) && (
+              <DealSigning
+                dealId={deal.id}
+                isBuyer={isBuyer}
+                dealStatus={deal.status}
+                commodity={deal.commodity_type}
+                price={deal.agreed_price}
+                volume={deal.volume_tonnes}
+                currency={deal.currency}
+                incoterm={deal.incoterm}
+                counterpartyName={deal.counterparty_name}
+              />
+            )}
 
             {/* Invite counterparty */}
             <InviteCounterparty dealId={deal.id} counterpartyName={deal.counterparty_name} />

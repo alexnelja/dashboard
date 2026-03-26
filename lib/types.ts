@@ -227,6 +227,19 @@ export interface DealSimulationRecord {
   created_at: string;
 }
 
+export interface DealSignature {
+  id: string;
+  deal_id: string;
+  signer_id: string;
+  signer_role: string;
+  signer_name: string | null;
+  signer_company: string | null;
+  signed_at: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  document_hash: string | null;
+}
+
 // GeoJSON point extracted from PostGIS geography columns
 export interface GeoPoint {
   lng: number;
