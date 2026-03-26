@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { requireAuth } from '@/lib/auth';
 import { getDealById, getDealMilestones, getDealDocuments, getDealRatings } from '@/lib/deal-queries';
 import { COMMODITY_CONFIG } from '@/lib/types';
+import type { Deal } from '@/lib/types';
 import { formatCurrency, timeAgo } from '@/lib/format';
 import { StatusBadge } from '@/app/components/status-badge';
 import { DealActions } from './deal-actions';
@@ -16,6 +17,8 @@ import { DealTabs } from './deal-tabs';
 import { DealMessages } from './deal-messages';
 import { InviteCounterparty } from './invite-counterparty';
 import { DocumentFlow } from './document-flow';
+import { VerificationPanel } from './verification-panel';
+import { verifyDealDocuments } from '@/lib/platform-verification';
 import { getTrustScoreForUser } from '@/lib/trust-queries';
 import { compareSpecs } from '@/lib/spec-comparison';
 import type { SpecTolerance, PriceAdjustmentRule } from '@/lib/spec-comparison';
@@ -44,6 +47,9 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
 
   const counterpartyId = isBuyer ? deal.seller_id : deal.buyer_id;
   const counterpartyTrust = await getTrustScoreForUser(counterpartyId);
+
+  // Compute platform verification
+  const platformVerification = verifyDealDocuments(deal as Deal, documents);
 
   // Compute spec comparison for delivered+ deals
   const showSpecComparison = ['delivered', 'escrow_released', 'completed'].includes(deal.status);
@@ -240,6 +246,7 @@ export default async function DealDetailPage({ params }: DealDetailPageProps) {
               commodity={deal.commodity_type}
               documents={documents}
             />
+            <VerificationPanel dealId={deal.id} platformVerification={platformVerification} />
             <DocumentUpload
               dealId={deal.id}
               documents={documents}
