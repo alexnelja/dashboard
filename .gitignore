@@ -23,3 +23,12 @@ next-env.d.ts
 # claude code tooling
 .claude/
 docs/superpowers/
+.env
+.env.local
+dist/
+build/
+.vscode/
+*.log
+__pycache__/
+.venv/
+.pytest_cache/
