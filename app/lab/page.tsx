@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { LabUploadClient } from './lab-upload-client';
 
 export default function LabPage() {
@@ -11,7 +12,9 @@ export default function LabPage() {
           <h1 className="text-xl font-bold text-white">Lab Report Upload</h1>
           <p className="text-gray-400 text-sm mt-1">Upload inspection results for a MineMarket deal.</p>
         </div>
-        <LabUploadClient />
+        <Suspense fallback={<div className="text-sm text-gray-500 text-center">Loading…</div>}>
+          <LabUploadClient />
+        </Suspense>
       </div>
     </div>
   );

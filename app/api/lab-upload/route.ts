@@ -5,6 +5,7 @@ import { compareSpecs } from '@/lib/spec-comparison';
 import type { SpecTolerance, PriceAdjustmentRule } from '@/lib/spec-comparison';
 import { formatLabSummary } from '@/lib/lab-summary';
 import { buildLabNotificationEmail } from '@/lib/lab-notification-email';
+import { verifyLabUploadToken } from '@/lib/lab-upload-token';
 
 export async function POST(request: NextRequest) {
   const admin = createAdminSupabaseClient();
@@ -16,9 +17,26 @@ export async function POST(request: NextRequest) {
   const reportType = formData.get('report_type') as string;
   const commodity = formData.get('commodity') as string | null;
   const assayDataRaw = formData.get('assay_data') as string | null;
+  const token = formData.get('token') as string | null;
 
   if (!file || !dealRef || !inspectorName || !company) {
     return NextResponse.json({ error: 'Deal reference, inspector, company and file are required' }, { status: 400 });
+  }
+
+  // Token auth: if the signing secret is configured, every upload must carry a
+  // valid token that binds the caller to a specific verification_request.
+  // This closes the prior hole where anyone with a deal-ref prefix could post
+  // arbitrary lab reports.
+  const signingSecret = process.env.LAB_UPLOAD_SIGNING_SECRET;
+  let tokenVerificationRequestId: string | null = null;
+  if (signingSecret) {
+    if (!token) {
+      return NextResponse.json({ error: 'Missing upload token' }, { status: 401 });
+    }
+    tokenVerificationRequestId = verifyLabUploadToken(token, signingSecret);
+    if (!tokenVerificationRequestId) {
+      return NextResponse.json({ error: 'Invalid or expired upload token' }, { status: 401 });
+    }
   }
 
   // Parse optional assay data
@@ -40,6 +58,18 @@ export async function POST(request: NextRequest) {
   }
 
   const deal = deals[0];
+
+  // If a token was supplied, make sure it belongs to this deal.
+  if (tokenVerificationRequestId) {
+    const { data: vr } = await admin
+      .from('verification_requests')
+      .select('deal_id')
+      .eq('id', tokenVerificationRequestId)
+      .maybeSingle();
+    if (!vr || vr.deal_id !== deal.id) {
+      return NextResponse.json({ error: 'Token does not match this deal' }, { status: 403 });
+    }
+  }
 
   // If caller declared a commodity, it must match the deal
   if (commodity && commodity !== deal.commodity_type) {
@@ -70,13 +100,18 @@ export async function POST(request: NextRequest) {
 
   // Find an existing pending/in_progress verification request to complete,
   // otherwise create a new completed one so the assay data is captured.
-  const { data: existing } = await admin
+  // If the caller presented a valid token, target that specific request so
+  // unrelated pending requests on the deal aren't accidentally closed.
+  const existingQuery = admin
     .from('verification_requests')
     .select('id')
-    .eq('deal_id', deal.id)
-    .in('status', ['pending', 'assigned', 'in_progress'])
-    .order('requested_at', { ascending: false })
-    .limit(1);
+    .eq('deal_id', deal.id);
+  const { data: existing } = tokenVerificationRequestId
+    ? await existingQuery.eq('id', tokenVerificationRequestId).limit(1)
+    : await existingQuery
+        .in('status', ['pending', 'assigned', 'in_progress'])
+        .order('requested_at', { ascending: false })
+        .limit(1);
 
   const resultsPayload = buildResultsPayload({
     inspectorName,

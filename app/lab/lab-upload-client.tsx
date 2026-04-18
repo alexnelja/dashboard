@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SPEC_FIELDS } from '@/lib/spec-fields';
 import { COMMODITY_CONFIG, type CommodityType } from '@/lib/types';
 
 const COMMODITIES = Object.keys(COMMODITY_CONFIG) as CommodityType[];
 
 export function LabUploadClient() {
+  const searchParams = useSearchParams();
+  const token = searchParams?.get('token') ?? '';
   const [dealRef, setDealRef] = useState('');
   const [inspectorName, setInspectorName] = useState('');
   const [company, setCompany] = useState('');
@@ -40,6 +43,7 @@ export function LabUploadClient() {
     formData.append('inspector_name', inspectorName);
     formData.append('company', company);
     formData.append('report_type', reportType);
+    if (token) formData.append('token', token);
 
     if (needsAssayFields && commodity) {
       const numericAssay: Record<string, number> = {};
@@ -89,6 +93,11 @@ export function LabUploadClient() {
 
   return (
     <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4">
+      {token && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+          Uploading via a signed invitation — this report will be attached to the assigned inspection request.
+        </div>
+      )}
       <div>
         <label className="block text-sm text-gray-300 mb-1">Deal Reference Code</label>
         <input
